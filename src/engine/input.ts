@@ -39,4 +39,9 @@ export class Input {
     this.pressed.clear();
     this.mouseButtonsPressed.clear();
   }
+
+  // Marks a click as handled, so the scene underneath doesn't also act on it.
+  consumeClick(button: number): void {
+    this.mouseButtonsPressed.delete(button);
+  }
 }

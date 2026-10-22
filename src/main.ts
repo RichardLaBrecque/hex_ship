@@ -6,6 +6,8 @@ import { SceneManager } from "./engine/scene";
 import { FlightScene } from "./scenes/FlightScene";
 import { GameOverScene } from "./scenes/GameOverScene";
 import { StationScene } from "./scenes/StationScene";
+import { drawMuteButton, muteButtonRect } from "./render/muteButton";
+import { pointInRect } from "./render/ui";
 import { addScore, loadRecords, saveRecords, scoreOf } from "./save/records";
 import { clearRun, loadRun, saveRun } from "./save/save";
 
@@ -80,9 +82,18 @@ openStation(saved ?? newRun(), saved ? `Welcome back. Day ${saved.day}, $${saved
 
 startLoop(
   (dt) => {
-    if (input.wasPressed("KeyM")) sound.toggleMute();
+    // The mute button sits over every screen, so it takes its click before the scene sees it.
+    const clickedMute = input.wasClicked(0) && pointInRect(input.mouse, muteButtonRect(width));
+    if (clickedMute) input.consumeClick(0);
+    if (clickedMute || input.wasPressed("KeyM")) sound.toggleMute();
     scenes.scene?.update(dt, input);
     input.endFrame();
   },
-  () => scenes.scene?.render(ctx, width, height),
+  () => {
+    scenes.scene?.render(ctx, width, height);
+    const muteButton = muteButtonRect(width);
+    const hovered = pointInRect(input.mouse, muteButton);
+    drawMuteButton(ctx, muteButton, sound.isMuted, hovered);
+    canvas.style.cursor = hovered ? "pointer" : "";
+  },
 );
