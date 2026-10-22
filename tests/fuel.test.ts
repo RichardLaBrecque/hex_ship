@@ -11,7 +11,8 @@ import { TEST_PARTS } from "./catalog";
 const TEST_ECONOMY: Economy = {
   startingMoney: 0,
   startingCrew: 0,
-  repairCostPerHp: 1,
+  repairShare: 0.5,
+  bridgeRepairPerHp: 1,
   crewHireCost: 1,
   crewWage: 1,
   fuelPrice: 3,

@@ -19,7 +19,8 @@ export const PLANETS: readonly [Planet, Planet] = [
 export const ECONOMY = {
   startingMoney: 600,
   startingCrew: 3,
-  repairCostPerHp: 2,
+  repairShare: 0.5, // repairing costs this share of the value the damage took off a part (must stay below 1)
+  bridgeRepairPerHp: 2, // the bridge has no price, so it's repaired at a flat rate
   crewHireCost: 40, // one-off signing fee per crew member
   crewWage: 15, // per crew member, paid at every launch
   fuelPrice: 2, // per fuel unit when refuelling at a station

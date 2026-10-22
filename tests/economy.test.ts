@@ -11,7 +11,8 @@ import { TEST_PARTS } from "./catalog";
 const TEST_ECONOMY: Economy = {
   startingMoney: 0,
   startingCrew: 0,
-  repairCostPerHp: 3,
+  repairShare: 0.5,
+  bridgeRepairPerHp: 3,
   crewHireCost: 40,
   crewWage: 10,
   fuelPrice: 2,
@@ -114,15 +115,24 @@ describe("repairs", () => {
     return testRun({ ship });
   };
 
-  it("cost the missing hp times the rate", () => {
-    expect(repairCost(damaged().ship, TEST_PARTS, TEST_ECONOMY)).toBe(45);
+  it("cost half the value the damage took off, plus the bridge's flat rate", () => {
+    // engine: $100 part missing a quarter of its hp → 25 × 0.5 = 12.5; bridge: 10 hp × $3 = 30
+    expect(repairCost(damaged().ship, TEST_PARTS, TEST_ECONOMY)).toBe(42);
   });
 
   it("restore every part to full and charge for it", () => {
     const run = ok(repairAll(damaged(), TEST_PARTS, TEST_ECONOMY));
-    expect(run.money).toBe(955);
+    expect(run.money).toBe(958);
     expect(partAt(run.ship, hex(0, 0))?.hp).toBe(50);
     expect(partAt(run.ship, hex(-1, 0))?.hp).toBe(20);
+  });
+
+  it("fix a scratch too small to charge for", () => {
+    const ship = new Map(testShip());
+    ship.set("0,1", { ...ship.get("0,1")!, hp: 9.9 }); // $10 cargo bay
+    const run = ok(repairAll(testRun({ ship }), TEST_PARTS, TEST_ECONOMY));
+    expect(run.money).toBe(1000);
+    expect(partAt(run.ship, hex(0, 1))?.hp).toBe(10);
   });
 
   it("refuse when nothing is damaged", () => {

@@ -40,15 +40,21 @@ export function sellPart(run: Run, h: Hex, catalog: PartCatalog = PARTS): Outcom
   return { ok: true, run: fitFuel(sold, catalog) };
 }
 
+// Repairing a part costs a share of the value its damage knocked off, so it's always cheaper
+// than selling it and buying a new one. The bridge has no price, so it uses a flat rate.
 export function repairCost(ship: Ship, catalog: PartCatalog = PARTS, econ: Economy = ECONOMY): number {
-  let missing = 0;
-  for (const part of ship.values()) missing += catalog[part.type].maxHp - part.hp;
-  return Math.ceil(missing * econ.repairCostPerHp);
+  let cost = 0;
+  for (const part of ship.values()) {
+    const def = catalog[part.type];
+    const missing = def.maxHp - part.hp;
+    cost += part.type === "bridge" ? missing * econ.bridgeRepairPerHp : (def.cost * missing * econ.repairShare) / def.maxHp;
+  }
+  return Math.floor(cost);
 }
 
 export function repairAll(run: Run, catalog: PartCatalog = PARTS, econ: Economy = ECONOMY): Outcome {
+  if ([...run.ship.values()].every((p) => p.hp >= catalog[p.type].maxHp)) return { ok: false, reason: "Nothing needs repairing." };
   const cost = repairCost(run.ship, catalog, econ);
-  if (cost === 0) return { ok: false, reason: "Nothing needs repairing." };
   if (run.money < cost) return { ok: false, reason: `Repairs cost $${cost}.` };
   const repaired = new Map<string, PlacedPart>();
   for (const [key, part] of run.ship) repaired.set(key, { ...part, hp: catalog[part.type].maxHp });
