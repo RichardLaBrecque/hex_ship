@@ -5,10 +5,10 @@ import { partAt, placePart, removePart, rotatePart, type PlacedPart, type Ship }
 import { fitFuel } from "./fuel";
 import type { Outcome, Run } from "./run";
 
-// What you get back for a part: a share of its price, less for damaged parts.
-export function sellValue(part: PlacedPart, catalog: PartCatalog = PARTS, econ: Economy = ECONOMY): number {
+// What you get back for a part: full price at full hp, scaled down by damage.
+export function sellValue(part: PlacedPart, catalog: PartCatalog = PARTS): number {
   const def = catalog[part.type];
-  return Math.floor(def.cost * econ.sellRefund * (part.hp / def.maxHp));
+  return Math.floor(def.cost * (part.hp / def.maxHp));
 }
 
 // Buys a part into a hex. An existing part there is sold first.
@@ -19,25 +19,24 @@ export function buyPart(
   type: PartId,
   rotation: number,
   catalog: PartCatalog = PARTS,
-  econ: Economy = ECONOMY,
 ): Outcome {
   const existing = partAt(run.ship, h);
   if (existing?.type === "bridge") return { ok: false, reason: "The bridge can't be replaced." };
   if (existing?.type === type) {
     return { ok: true, run: { ...run, ship: rotatePart(run.ship, h, rotation - existing.rotation) } };
   }
-  const refund = existing ? sellValue(existing, catalog, econ) : 0;
+  const refund = existing ? sellValue(existing, catalog) : 0;
   const price = catalog[type].cost;
   if (run.money + refund < price) return { ok: false, reason: `${catalog[type].name} costs $${price}.` };
   const bought = { ...run, ship: placePart(run.ship, h, type, rotation, catalog), money: run.money + refund - price };
   return { ok: true, run: fitFuel(bought, catalog) };
 }
 
-export function sellPart(run: Run, h: Hex, catalog: PartCatalog = PARTS, econ: Economy = ECONOMY): Outcome {
+export function sellPart(run: Run, h: Hex, catalog: PartCatalog = PARTS): Outcome {
   const existing = partAt(run.ship, h);
   if (!existing) return { ok: false, reason: "Nothing to sell there." };
   if (existing.type === "bridge") return { ok: false, reason: "The bridge can't be sold." };
-  const sold = { ...run, ship: removePart(run.ship, h), money: run.money + sellValue(existing, catalog, econ) };
+  const sold = { ...run, ship: removePart(run.ship, h), money: run.money + sellValue(existing, catalog) };
   return { ok: true, run: fitFuel(sold, catalog) };
 }
 

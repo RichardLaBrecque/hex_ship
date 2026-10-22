@@ -19,7 +19,6 @@ export const PLANETS: readonly [Planet, Planet] = [
 export const ECONOMY = {
   startingMoney: 600,
   startingCrew: 3,
-  sellRefund: 0.5, // share of a part's price you get back, scaled by its remaining HP
   repairCostPerHp: 2,
   crewHireCost: 40, // one-off signing fee per crew member
   crewWage: 15, // per crew member, paid at every launch

@@ -11,7 +11,6 @@ import { TEST_PARTS } from "./catalog";
 const TEST_ECONOMY: Economy = {
   startingMoney: 0,
   startingCrew: 0,
-  sellRefund: 0.5,
   repairCostPerHp: 1,
   crewHireCost: 1,
   crewWage: 1,
@@ -97,7 +96,7 @@ describe("refuel", () => {
 
 describe("fitFuel", () => {
   it("spills fuel that no longer fits after selling a tank", () => {
-    const run = ok(sellPart(testRun(), hex(0, 1), TEST_PARTS, TEST_ECONOMY));
+    const run = ok(sellPart(testRun(), hex(0, 1), TEST_PARTS));
     expect(run.fuel).toBe(30);
   });
 

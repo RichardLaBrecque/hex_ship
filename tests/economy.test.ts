@@ -11,7 +11,6 @@ import { TEST_PARTS } from "./catalog";
 const TEST_ECONOMY: Economy = {
   startingMoney: 0,
   startingCrew: 0,
-  sellRefund: 0.5,
   repairCostPerHp: 3,
   crewHireCost: 40,
   crewWage: 10,
@@ -57,48 +56,53 @@ const sequence = (...values: number[]) => {
 
 describe("buyPart", () => {
   it("charges the part's price", () => {
-    const run = ok(buyPart(testRun(), hex(1, 0), "laser", 0, TEST_PARTS, TEST_ECONOMY));
+    const run = ok(buyPart(testRun(), hex(1, 0), "laser", 0, TEST_PARTS));
     expect(run.money).toBe(900);
     expect(partAt(run.ship, hex(1, 0))?.type).toBe("laser");
   });
 
   it("refuses when you can't afford it", () => {
-    expect(reason(buyPart(testRun({ money: 99 }), hex(1, 0), "laser", 0, TEST_PARTS, TEST_ECONOMY))).toBe("LASER costs $100.");
+    expect(reason(buyPart(testRun({ money: 99 }), hex(1, 0), "laser", 0, TEST_PARTS))).toBe("LASER costs $100.");
   });
 
   it("sells the part it replaces first", () => {
-    // cargo bay (cost 10) refunds 5, laser costs 100
-    const run = ok(buyPart(testRun({ money: 95 }), hex(0, 1), "laser", 0, TEST_PARTS, TEST_ECONOMY));
+    // cargo bay (cost 10) refunds 10, laser costs 100
+    const run = ok(buyPart(testRun({ money: 90 }), hex(0, 1), "laser", 0, TEST_PARTS));
     expect(run.money).toBe(0);
   });
 
   it("turns a part of the same type for free", () => {
-    const run = ok(buyPart(testRun(), hex(-1, 0), "engine", 2, TEST_PARTS, TEST_ECONOMY));
+    const run = ok(buyPart(testRun(), hex(-1, 0), "engine", 2, TEST_PARTS));
     expect(run.money).toBe(1000);
     expect(partAt(run.ship, hex(-1, 0))?.rotation).toBe(2);
   });
 
   it("won't replace the bridge", () => {
-    expect(reason(buyPart(testRun(), hex(0, 0), "armor", 0, TEST_PARTS, TEST_ECONOMY))).toBe("The bridge can't be replaced.");
+    expect(reason(buyPart(testRun(), hex(0, 0), "armor", 0, TEST_PARTS))).toBe("The bridge can't be replaced.");
   });
 });
 
 describe("sellPart", () => {
-  it("refunds half the price", () => {
-    const run = ok(sellPart(testRun(), hex(-1, 0), TEST_PARTS, TEST_ECONOMY));
-    expect(run.money).toBe(1050);
+  it("refunds the full price of an undamaged part", () => {
+    const run = ok(sellPart(testRun(), hex(-1, 0), TEST_PARTS));
+    expect(run.money).toBe(1100);
     expect(partAt(run.ship, hex(-1, 0))).toBeUndefined();
   });
 
+  it("gives all the money back for a part bought and sold before launch", () => {
+    const bought = ok(buyPart(testRun(), hex(1, 0), "laser", 0, TEST_PARTS));
+    expect(ok(sellPart(bought, hex(1, 0), TEST_PARTS)).money).toBe(1000);
+  });
+
   it("won't sell the bridge", () => {
-    expect(reason(sellPart(testRun(), hex(0, 0), TEST_PARTS, TEST_ECONOMY))).toBe("The bridge can't be sold.");
+    expect(reason(sellPart(testRun(), hex(0, 0), TEST_PARTS))).toBe("The bridge can't be sold.");
   });
 });
 
 describe("sellValue", () => {
   it("drops with damage", () => {
-    // engine: cost 100, max hp 20, at 5 hp → 100 × 0.5 × 0.25
-    expect(sellValue({ hex: hex(0, 0), type: "engine", rotation: 3, hp: 5 }, TEST_PARTS, TEST_ECONOMY)).toBe(12);
+    // engine: cost 100, max hp 20, at 5 hp → a quarter of its price
+    expect(sellValue({ hex: hex(0, 0), type: "engine", rotation: 3, hp: 5 }, TEST_PARTS)).toBe(25);
   });
 });
 
