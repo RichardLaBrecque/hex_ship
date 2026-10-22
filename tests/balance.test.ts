@@ -1,12 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { PLANETS } from "../src/data/balance";
+import { ENEMY_TIERS } from "../src/data/enemies";
 import { BUILDABLE, PARTS } from "../src/data/parts";
 import { repairCost, sellValue } from "../src/economy/shop";
 import { hex } from "../src/hex/hex";
-import { starterShip } from "../src/ship/ship";
+import { shipValue, starterShip } from "../src/ship/ship";
 import { computeShipStats } from "../src/ship/stats";
+import { validateShip } from "../src/ship/validate";
 import { burnFuel } from "../src/sim/fuel";
 import { stepBody, type Body } from "../src/sim/physics";
+import { buildEnemy } from "../src/sim/spawner";
+import { seeded } from "./random";
 
 // Design rules checked against the real balance numbers. If one fails after a rebalance,
 // either the numbers or the rule needs to change on purpose.
@@ -37,4 +41,28 @@ describe("balance", () => {
     }
   });
 
+  describe("tier-1 enemies", () => {
+    const enemies = Array.from({ length: 200 }, (_, i) => buildEnemy(ENEMY_TIERS[0], seeded(i + 1)));
+
+    it("are spaceworthy by the same rules as the player's ship", () => {
+      for (const ship of enemies) expect(validateShip(ship).problems).toEqual([]);
+    });
+
+    it("are worth within 15% of the starter ship", () => {
+      const starter = shipValue(starterShip());
+      for (const ship of enemies) {
+        expect(shipValue(ship)).toBeGreaterThanOrEqual(starter * 0.85);
+        expect(shipValue(ship)).toBeLessThanOrEqual(starter * 1.15);
+      }
+    });
+
+    it("carry only projectile weapons", () => {
+      for (const ship of enemies) {
+        for (const part of ship.values()) {
+          const weapon = PARTS[part.type].weapon;
+          if (weapon) expect(weapon.kind).toBe("shell");
+        }
+      }
+    });
+  });
 });

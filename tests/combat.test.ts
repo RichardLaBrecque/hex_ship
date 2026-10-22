@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { COMBAT } from "../src/data/balance";
+import { AI } from "../src/data/enemies";
 import { hex } from "../src/hex/hex";
 import { placePart, type Ship } from "../src/ship/ship";
+import { aiControls, aiMode } from "../src/sim/ai";
 import type { Body } from "../src/sim/physics";
 import { applyHit, keyAtWorld, makeVessel, toLocal, toWorld, type Side, type Vessel } from "../src/sim/vessel";
 import { aimPoint, bearingTo, fireWeapons, projectileHit, stepProjectile, type Projectile } from "../src/sim/weapons";
@@ -171,5 +173,53 @@ describe("projectileHit", () => {
 
   it("passes through its own side", () => {
     expect(projectileHit(shell("enemy"), [dot("enemy", 0, 0)], SIZE)).toBeNull();
+  });
+});
+
+describe("aiMode", () => {
+  const pilot = { body: at(0, 0), hull: 100, fullHull: 100, range: 100 };
+
+  it("chases a target out of reach", () => {
+    expect(aiMode(pilot, 90)).toBe("chase");
+  });
+
+  it("attacks inside its weapon range", () => {
+    expect(aiMode(pilot, 80)).toBe("attack");
+  });
+
+  it("flees once badly damaged", () => {
+    expect(aiMode({ ...pilot, hull: 34 }, 50)).toBe("flee");
+  });
+
+  it("flees once its weapons are gone", () => {
+    expect(aiMode({ ...pilot, range: 0 }, 50)).toBe("flee");
+  });
+});
+
+describe("aiControls", () => {
+  const pilot = (angle: number, hull = 100) => ({ body: at(0, 0, angle), hull, fullHull: 100, range: 100 });
+
+  it("flies at a far target at full thrust", () => {
+    const { controls } = aiControls(pilot(0), at(500, 0));
+    expect(controls).toEqual({ thrust: 1, turn: 0 });
+  });
+
+  it("circles just off a straight line when attacking", () => {
+    // facing the target exactly, it steers clockwise by the orbit offset
+    const { controls } = aiControls(pilot(0), at(60, 0));
+    expect(controls.turn).toBeCloseTo(Math.min(1, ((AI.orbitOffset * Math.PI) / 180) * AI.steering));
+    expect(controls.thrust).toBe(0.5);
+  });
+
+  it("brakes when too close", () => {
+    expect(aiControls(pilot(0), at(30, 0)).controls.thrust).toBe(-1);
+  });
+
+  it("turns away to flee", () => {
+    // target dead ahead: wants to face backwards, so turns hard and barely thrusts
+    const { mode, controls } = aiControls(pilot(0, 10), at(60, 0));
+    expect(mode).toBe("flee");
+    expect(Math.abs(controls.turn)).toBe(1);
+    expect(controls.thrust).toBe(0.2);
   });
 });
