@@ -15,7 +15,7 @@ const HEX_WIDTH = SIZE * Math.sqrt(3); // pixels between neighbouring hex centre
 const build = (...parts: [number, number, Parameters<typeof placePart>[2], number][]): Ship =>
   parts.reduce<Ship>((ship, [q, r, type, rotation]) => placePart(ship, hex(q, r), type, rotation, TEST_PARTS), new Map());
 
-const at = (x: number, y: number, angle = 0): Body => ({ x, y, vx: 0, vy: 0, angle });
+const at = (x: number, y: number, angle = 0): Body => ({ x, y, vx: 0, vy: 0, angle, spin: 0 });
 
 const vessel = (side: Side, ship: Ship, body: Body, crew = 9): Vessel => makeVessel(side, ship, body, crew, SIZE, TEST_PARTS);
 
@@ -91,7 +91,7 @@ describe("bearingTo", () => {
 describe("aimPoint", () => {
   it("leads a moving target by its travel during the shot's flight", () => {
     // 100 px away at speed 50 = 2 s of flight; target moves 10 px/s down
-    const point = aimPoint({ x: 0, y: 0 }, { x: 100, y: 0, vx: 0, vy: 10, angle: 0 }, 50);
+    const point = aimPoint({ x: 0, y: 0 }, { x: 100, y: 0, vx: 0, vy: 10, angle: 0, spin: 0 }, 50);
     expect(point).toEqual({ x: 100, y: 20 });
   });
 });

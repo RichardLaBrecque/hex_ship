@@ -48,6 +48,19 @@ const FORWARD_SHARE = [1, 0.5, 0, 0, 0, 0.5];
 // The ship is pushed opposite the exhaust: exhaust straight back gives full thrust, 60° off gives half.
 export const forwardFactor = (exhaustDirection: number): number => FORWARD_SHARE[mod6(exhaustDirection + 3)];
 
+// A main engine pushes the ship forward (exhaust back or 60° off back) and fires on thrust.
+export const isMainEngine = (part: PlacedPart): boolean => part.type === "engine" && forwardFactor(part.rotation) > 0;
+
+// A retro engine pushes the ship backward (exhaust forward or 60° off forward) and fires on brake.
+export const isRetroEngine = (part: PlacedPart): boolean => part.type === "engine" && forwardFactor(part.rotation) === 0;
+
+// How hard an engine visibly fires, 0..1, for a thrust control (1 full forward, -1 full brake).
+// Main engines also run in reverse when braking, but that shows no flame.
+export function engineFlame(ship: Ship, part: PlacedPart, thrust: number): number {
+  if (part.type !== "engine" || isExhaustBlocked(ship, part)) return 0;
+  return isMainEngine(part) ? Math.max(0, thrust) : Math.max(0, -thrust);
+}
+
 // Mass-weighted centre in ship-local pixels for a given hex size. The ship turns around this point.
 export function centerOfMass(ship: Ship, size: number, catalog: PartCatalog = PARTS): Point {
   let total = 0;

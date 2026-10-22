@@ -4,6 +4,19 @@ import { placePart, type Ship } from "../src/ship/ship";
 import { computeShipStats } from "../src/ship/stats";
 import { TEST_PARTS } from "./catalog";
 
+// hex size 10 so engine positions are easy to work out; braking reverses the main engines at half power
+const TUNING = {
+  hexSize: 10,
+  thrustScale: 10,
+  reverseFactor: 0.5,
+  turnScale: 1,
+  gyroResponse: 4,
+  torqueScale: 1,
+  spinDrag: 1,
+  drag: 0.5,
+  dockSpeed: 50,
+};
+
 const build = (...parts: [number, number, Parameters<typeof placePart>[2], number][]): Ship =>
   parts.reduce<Ship>((ship, [q, r, type, rotation]) => placePart(ship, hex(q, r), type, rotation, TEST_PARTS), new Map());
 
@@ -53,12 +66,51 @@ describe("computeShipStats", () => {
 
   it("gives half thrust to an engine angled 60° off", () => {
     const ship = build([0, 0, "bridge", 0], [0, -1, "engine", 4]);
-    expect(computeShipStats(ship, 2, TEST_PARTS).thrust).toBe(20);
+    expect(computeShipStats(ship, 2, TEST_PARTS).thrust).toBeCloseTo(20);
   });
 
   it("gives no forward thrust to an engine pushing backwards", () => {
     const ship = build([0, 0, "bridge", 0], [1, 0, "engine", 0]);
     expect(computeShipStats(ship, 2, TEST_PARTS).thrust).toBe(0);
+  });
+
+  it("pushes from where each engine sits, twisting the ship about its centre of mass", () => {
+    // engine at (0,-1) is at pixel (-8.66, -15); bridge and engine weigh 10 each, so the centre is halfway
+    // and the engine's arm is (-4.33, -7.5). Pushing +x with 40 from above the centre turns the ship clockwise: 7.5 × 40.
+    const ship = build([0, 0, "bridge", 0], [0, -1, "engine", 3]);
+    const { main } = computeShipStats(ship, 2, TEST_PARTS, TUNING);
+    expect(main.force.x).toBeCloseTo(40);
+    expect(main.force.y).toBeCloseTo(0);
+    expect(main.torque).toBeCloseTo(300);
+  });
+
+  it("doesn't twist a ship whose engine pushes through its centre of mass", () => {
+    const ship = build([0, 0, "bridge", 0], [-1, 0, "engine", 3]);
+    expect(computeShipStats(ship, 2, TEST_PARTS, TUNING).main.torque).toBeCloseTo(0);
+  });
+
+  it("pushes sideways from an engine angled 60° off", () => {
+    // exhaust 4 (NW... back-left) pushes 60° clockwise of forward: 40 × (cos 60°, sin 60°)
+    const ship = build([0, 0, "bridge", 0], [0, -1, "engine", 4]);
+    const { force } = computeShipStats(ship, 2, TEST_PARTS, TUNING).main;
+    expect(force.x).toBeCloseTo(20);
+    expect(force.y).toBeCloseTo(40 * Math.sin(Math.PI / 3));
+  });
+
+  it("brakes with retro engines at full power plus the main engines reversed", () => {
+    // main engine 40 forward, retro engine 40 backward: brake = -40 - 40 × 0.5; fuel 2 + 2 × 0.5
+    const ship = build([0, 0, "bridge", 0], [-1, 0, "engine", 3], [1, 0, "engine", 0], [0, 1, "crew", 0]);
+    const stats = computeShipStats(ship, 9, TEST_PARTS, TUNING);
+    expect(stats.main.force.x).toBeCloseTo(40);
+    expect(stats.main.fuelBurn).toBe(2);
+    expect(stats.brake.force.x).toBeCloseTo(-60);
+    expect(stats.brake.fuelBurn).toBe(3);
+  });
+
+  it("gives a one-part ship the inertia of a small disc", () => {
+    // mass 10 × hex size² / 2
+    const ship = build([0, 0, "bridge", 0]);
+    expect(computeShipStats(ship, 1, TEST_PARTS, TUNING).inertia).toBe(500);
   });
 
   it("ignores an engine whose exhaust hex is occupied", () => {

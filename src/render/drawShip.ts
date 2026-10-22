@@ -1,6 +1,6 @@
 import { PARTS, type PartCatalog } from "../data/parts";
 import { directionAngle, hexToPixel, neighbor, type Point } from "../hex/hex";
-import { forwardFactor, isExhaustBlocked, type PlacedPart, type Ship } from "../ship/ship";
+import { engineFlame, type PlacedPart, type Ship } from "../ship/ship";
 import { drawHex } from "./drawHex";
 import { drawPartIcon } from "./drawParts";
 import { THEME } from "./ui";
@@ -10,7 +10,7 @@ export type ShipDrawOptions = {
   size: number; // hex size in pixels
   angle?: number; // ship rotation in radians
   pivot?: Point; // ship-local point placed at `origin` and rotated around (e.g. centre of mass)
-  flames?: number; // 0..1 engine flame strength
+  thrust?: number; // the thrust control, -1..1: main engines flame on thrust, retro engines on brake
   alpha?: number;
   flagged?: ReadonlySet<string>; // hexKeys drawn with a red warning outline
   outline?: string; // hex border colour for every part, e.g. to mark enemies
@@ -23,17 +23,18 @@ export function drawShip(ctx: CanvasRenderingContext2D, ship: Ship, options: Shi
   ctx.rotate(options.angle ?? 0);
   if (options.pivot) ctx.translate(-options.pivot.x, -options.pivot.y);
   ctx.globalAlpha = options.alpha ?? 1;
-  if (options.flames) drawEngineFlames(ctx, ship, options.size, options.flames);
+  if (options.thrust) drawEngineFlames(ctx, ship, options.size, options.thrust);
   for (const [key, part] of ship) {
     drawPart(ctx, part, options.size, options.flagged?.has(key) ?? false, options.catalog ?? PARTS, options.outline);
   }
   ctx.restore();
 }
 
-// Flames out of every working engine that pushes the ship forward, drawn under the hull.
-function drawEngineFlames(ctx: CanvasRenderingContext2D, ship: Ship, size: number, strength: number): void {
+// Flames out of every engine that is firing, drawn under the hull.
+function drawEngineFlames(ctx: CanvasRenderingContext2D, ship: Ship, size: number, thrust: number): void {
   for (const part of ship.values()) {
-    if (part.type !== "engine" || isExhaustBlocked(ship, part) || forwardFactor(part.rotation) === 0) continue;
+    const strength = engineFlame(ship, part, thrust);
+    if (strength <= 0) continue;
     const from = hexToPixel(part.hex, size);
     const to = hexToPixel(neighbor(part.hex, part.rotation), size);
     const length = (0.6 + Math.random() * 0.4) * strength;

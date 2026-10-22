@@ -24,7 +24,7 @@ const TEST_ECONOMY: Economy = {
   bountyShare: 0,
 };
 
-const TUNING = { hexSize: 10, thrustScale: 10, reverseFactor: 0.5, turnScale: 1, drag: 0.5, dockSpeed: 50 };
+const TUNING = { hexSize: 10, thrustScale: 10, reverseFactor: 0.5, turnScale: 1, gyroResponse: 4, torqueScale: 1, spinDrag: 1, drag: 0.5, dockSpeed: 50 };
 
 // bridge + rear engine + two 30-unit tanks = 60 fuel capacity
 function testShip(): Ship {

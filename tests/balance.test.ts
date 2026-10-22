@@ -8,7 +8,7 @@ import { shipValue, starterShip } from "../src/ship/ship";
 import { computeShipStats } from "../src/ship/stats";
 import { validateShip } from "../src/ship/validate";
 import { burnFuel } from "../src/sim/fuel";
-import { stepBody, type Body } from "../src/sim/physics";
+import { stepBody, thrustSpin, type Body } from "../src/sim/physics";
 import { buildEnemy } from "../src/sim/spawner";
 import { seeded } from "./random";
 
@@ -19,11 +19,13 @@ describe("balance", () => {
     const stats = computeShipStats(starterShip(), Infinity);
     const planetGap = Math.hypot(PLANETS[1].x - PLANETS[0].x, PLANETS[1].y - PLANETS[0].y);
 
-    let body: Body = { x: 0, y: 0, vx: 0, vy: 0, angle: 0 };
+    let body: Body = { x: 0, y: 0, vx: 0, vy: 0, angle: 0, spin: 0 };
     let fuel = stats.fuelCapacity;
     const dt = 1 / 60;
     while (fuel > 0) {
-      body = stepBody(body, { thrust: 1, turn: 0 }, stats, dt);
+      // The pilot steers to hold the heading: the starter's engines pull it slightly off a straight line.
+      const turn = Math.max(-1, Math.min(1, -body.angle * 5 - body.spin));
+      body = stepBody(body, { thrust: 1, turn }, stats, dt);
       fuel = burnFuel(fuel, 1, stats.fuelBurn, dt);
     }
 
@@ -93,6 +95,15 @@ describe("balance", () => {
 
     it("are spaceworthy by the same rules as the player's ship", () => {
       for (const ship of enemies) expect(validateShip(ship).problems).toEqual([]);
+    });
+
+    it("drift-turn under 10°/s from lopsided engines, so the AI can still aim", () => {
+      const limit = (10 * Math.PI) / 180;
+      for (const ship of enemies) {
+        const stats = computeShipStats(ship, Infinity);
+        expect(Math.abs(thrustSpin(stats, stats.main))).toBeLessThan(limit);
+        expect(Math.abs(thrustSpin(stats, stats.brake))).toBeLessThan(limit);
+      }
     });
 
     it("stay within 15% under their budget and never go over", () => {

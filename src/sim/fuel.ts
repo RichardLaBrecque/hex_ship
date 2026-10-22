@@ -1,7 +1,7 @@
 import { FLIGHT } from "../data/balance";
 import type { FlightTuning } from "./physics";
 
-// Engines burn in proportion to how hard they push; braking (half power) burns half.
+// Engines burn in proportion to how hard they push. `burnRate` is for the engines firing (see activeThrust).
 export function burnFuel(fuel: number, power: number, burnRate: number, dt: number): number {
   return Math.max(0, fuel - burnRate * Math.abs(power) * dt);
 }

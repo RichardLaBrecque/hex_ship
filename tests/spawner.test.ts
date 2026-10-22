@@ -54,14 +54,14 @@ describe("spawnBody", () => {
 
   it("appears ahead of the player along the route, facing the player", () => {
     // random 0.5 means no spread
-    const body = spawnBody({ x: 0, y: 0, vx: 0, vy: 0, angle: 0 }, { x: 0, y: 500 }, () => 0.5, ENC);
+    const body = spawnBody({ x: 0, y: 0, vx: 0, vy: 0, angle: 0, spin: 0 }, { x: 0, y: 500 }, () => 0.5, ENC);
     expect(body.x).toBeCloseTo(0);
     expect(body.y).toBeCloseTo(100);
     expect(body.angle).toBeCloseTo(-Math.PI / 2);
   });
 
   it("strays no more than the spread off the route", () => {
-    const body = spawnBody({ x: 0, y: 0, vx: 0, vy: 0, angle: 0 }, { x: 500, y: 0 }, () => 1, ENC);
+    const body = spawnBody({ x: 0, y: 0, vx: 0, vy: 0, angle: 0, spin: 0 }, { x: 500, y: 0 }, () => 1, ENC);
     expect(Math.atan2(body.y, body.x)).toBeCloseTo(Math.PI / 3);
   });
 });

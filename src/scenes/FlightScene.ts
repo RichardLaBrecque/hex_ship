@@ -13,11 +13,11 @@ import { directionAngle, hex, type Point } from "../hex/hex";
 import { drawPart, drawShip } from "../render/drawShip";
 import { drawText, THEME } from "../render/ui";
 import { repairShip } from "../ship/damage";
-import { forwardFactor, isExhaustBlocked, type PlacedPart } from "../ship/ship";
+import { engineFlame, type PlacedPart } from "../ship/ship";
 import { computeShipStats } from "../ship/stats";
 import { aiControls, type AiMode } from "../sim/ai";
 import { burnFuel } from "../sim/fuel";
-import { enginePower, speed, stepBody, type Body } from "../sim/physics";
+import { activeThrust, speed, stepBody, type Body } from "../sim/physics";
 import { buildEnemy, spawnBody } from "../sim/spawner";
 import { applyHit, hexWorld, isWrecked, makeVessel, setShip, type Vessel } from "../sim/vessel";
 import { fireWeapons, projectileHit, stepProjectile, weaponRange, type Beam, type Projectile } from "../sim/weapons";
@@ -91,6 +91,7 @@ export class FlightScene implements Scene {
       vx: 0,
       vy: 0,
       angle: heading,
+      spin: 0,
     };
     this.player = makeVessel("player", run.ship, body, run.crew);
     this.camera = { x: body.x, y: body.y };
@@ -132,9 +133,10 @@ export class FlightScene implements Scene {
     const player = this.player;
     player.body = stepBody(player.body, { thrust: this.thrust, turn }, player.stats, dt);
     // A destroyed tank takes its fuel with it.
-    this.fuel = Math.min(player.stats.fuelCapacity, burnFuel(this.fuel, enginePower(this.thrust), player.stats.fuelBurn, dt));
+    const { mode, power } = activeThrust(player.stats, this.thrust);
+    this.fuel = Math.min(player.stats.fuelCapacity, burnFuel(this.fuel, power, mode.fuelBurn, dt));
     this.options.sound.setListener(player.body);
-    this.options.sound.thrust(enginePower(this.thrust));
+    this.options.sound.thrust(power);
 
     if (this.encounters.length > 0 && this.routeProgress() >= this.encounters[0].at) {
       for (const tier of this.encounters.shift()!.enemies) this.spawnEnemy(tier);
@@ -247,15 +249,15 @@ export class FlightScene implements Scene {
     this.trauma = decayTrauma(this.trauma, dt);
   }
 
-  // Puffs out of every engine that is pushing the ship forward.
+  // Puffs out of every engine that is firing: main engines on thrust, retro engines on brake.
   private emitExhaust(v: Vessel, thrust: number, dt: number): void {
-    if (thrust <= 0) return;
     for (const part of v.ship.values()) {
-      if (part.type !== "engine" || isExhaustBlocked(v.ship, part) || forwardFactor(part.rotation) === 0) continue;
+      const flame = engineFlame(v.ship, part, thrust);
+      if (flame <= 0) continue;
       const angle = v.body.angle + directionAngle(part.rotation);
       const center = hexWorld(v, part);
       const nozzle = { x: center.x + Math.cos(angle) * FLIGHT.hexSize, y: center.y + Math.sin(angle) * FLIGHT.hexSize };
-      for (let i = emitCount(EXHAUST_RATE * thrust, dt, Math.random); i > 0; i--) {
+      for (let i = emitCount(EXHAUST_RATE * flame, dt, Math.random); i > 0; i--) {
         this.particles.push(exhaust(nozzle, angle, { x: v.body.vx, y: v.body.vy }, Math.random));
       }
     }
@@ -355,7 +357,7 @@ export class FlightScene implements Scene {
       angle: v.body.angle,
       pivot: v.pivot,
       size: FLIGHT.hexSize,
-      flames: Math.max(0, thrust),
+      thrust,
       outline,
     });
     if (v.stats.shieldMax > 0 && v.shield > 0) {

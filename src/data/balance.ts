@@ -3,8 +3,11 @@
 export const FLIGHT = {
   hexSize: 12, // pixels per hex when flying
   thrustScale: 30, // ship acceleration stat → pixels/s²
-  reverseFactor: 0.5, // braking strength as a share of forward thrust
+  reverseFactor: 0.25, // braking runs the main engines in reverse at this share; retro engines add full power on top
   turnScale: 1.2, // ship turn-rate stat → radians/s
+  gyroResponse: 4, // per second: how hard the gyro corrects spin; higher snaps to the asked-for turn faster and resists engine twist more
+  torqueScale: 1, // how strongly off-centre engines twist the ship; 0 turns the effect off
+  spinDrag: 1, // per second; slows spin on its own, so a ship that overpowers its gyro spins steadily instead of ever faster
   drag: 0.3, // per second; lower is slidier. Top speed ≈ acceleration × thrustScale / drag
   dockSpeed: 80, // must be slower than this (pixels/s) to dock
 };
