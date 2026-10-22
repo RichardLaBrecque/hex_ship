@@ -35,6 +35,7 @@ export type StationOptions = {
   run: Run;
   report?: string; // shown on arrival, e.g. what the last trip earned
   onLaunch: (run: Run) => void;
+  onChange: (run: Run) => void; // after every purchase, sale, hire, contract or rotation
 };
 
 // Docked at a planet: build and trade parts, manage crew, repair, pick contracts, launch.
@@ -196,6 +197,7 @@ export class StationScene implements Scene {
     this.problems = launchProblems(run);
     this.launchCost = launchCost(run);
     this.tripFuel = tripFuelEstimate(this.stats, tripDistance(run));
+    this.options.onChange(run);
   }
 
   private inspectedPart(): PlacedPart | undefined {

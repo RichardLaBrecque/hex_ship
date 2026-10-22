@@ -5,6 +5,7 @@ import { SceneManager } from "./engine/scene";
 import { FlightScene } from "./scenes/FlightScene";
 import { GameOverScene } from "./scenes/GameOverScene";
 import { StationScene } from "./scenes/StationScene";
+import { clearRun, loadRun, saveRun } from "./save/save";
 
 const canvas = document.getElementById("game") as HTMLCanvasElement;
 const ctx = canvas.getContext("2d")!;
@@ -26,15 +27,19 @@ function resize(): void {
 window.addEventListener("resize", resize);
 resize();
 
+// The run is saved at every station change, so a reload picks up where you left off.
 function openStation(run: Run, report?: string): void {
-  scenes.switchTo(new StationScene({ run, report, onLaunch: (docked) => startTrip(docked) }));
+  saveRun(run);
+  scenes.switchTo(new StationScene({ run, report, onLaunch: (docked) => startTrip(docked), onChange: saveRun }));
 }
 
 // Launch costs are paid up front; turning back (Esc) doesn't refund them.
+// Saving the launched run means closing the tab mid-flight is like turning back: back at the station, wages spent.
 function startTrip(docked: Run): void {
   const outcome = launch(docked);
   if (!outcome.ok) return;
   const flying = outcome.run;
+  saveRun(flying);
   scenes.switchTo(
     new FlightScene({
       run: flying,
@@ -47,14 +52,18 @@ function startTrip(docked: Run): void {
         trip.fuel > 0
           ? openStation(afterFlight(flying, trip), withBounty("Turned back. Wages aren't refunded.", trip.bounty))
           : openStation(towBack(afterFlight(flying, trip)), withBounty("Towed back on an empty tank.", trip.bounty)),
-      onDestroyed: () => scenes.switchTo(new GameOverScene({ run: flying, onRestart: () => openStation(newRun()) })),
+      onDestroyed: () => {
+        clearRun();
+        scenes.switchTo(new GameOverScene({ run: flying, onRestart: () => openStation(newRun()) }));
+      },
     }),
   );
 }
 
 const withBounty = (report: string, bounty: number): string => (bounty > 0 ? `${report} Bounties: +$${bounty}` : report);
 
-openStation(newRun());
+const saved = loadRun();
+openStation(saved ?? newRun(), saved ? `Welcome back. Day ${saved.day}, $${saved.money}.` : undefined);
 
 startLoop(
   (dt) => {
