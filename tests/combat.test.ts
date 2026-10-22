@@ -6,7 +6,7 @@ import { placePart, type Ship } from "../src/ship/ship";
 import { aiControls, aiMode } from "../src/sim/ai";
 import type { Body } from "../src/sim/physics";
 import { applyHit, keyAtWorld, makeVessel, toLocal, toWorld, type Side, type Vessel } from "../src/sim/vessel";
-import { aimPoint, bearingTo, fireWeapons, projectileHit, stepProjectile, type Projectile } from "../src/sim/weapons";
+import { aimPoint, bearingTo, fireWeapons, projectileHit, stepProjectile, weaponRange, type Projectile } from "../src/sim/weapons";
 import { TEST_PARTS } from "./catalog";
 
 const SIZE = 10;
@@ -173,6 +173,19 @@ describe("projectileHit", () => {
 
   it("passes through its own side", () => {
     expect(projectileHit(shell("enemy"), [dot("enemy", 0, 0)], SIZE)).toBeNull();
+  });
+});
+
+describe("weaponRange", () => {
+  it("is the shortest range, so every weapon aboard can reach", () => {
+    // TEST_PARTS: laser and cannon both reach 100, missile too; give the cannon a shorter reach
+    const catalog = { ...TEST_PARTS, cannon: { ...TEST_PARTS.cannon, weapon: { ...TEST_PARTS.cannon.weapon!, range: 60 } } };
+    const ship = build([0, 0, "bridge", 0], [1, 0, "laser", 0], [1, -1, "cannon", 0]);
+    expect(weaponRange(vessel("enemy", ship, at(0, 0)), catalog)).toBe(60);
+  });
+
+  it("is 0 for an unarmed ship", () => {
+    expect(weaponRange(dot("enemy", 0, 0), TEST_PARTS)).toBe(0);
   });
 });
 

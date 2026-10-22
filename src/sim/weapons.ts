@@ -55,11 +55,11 @@ export const fireRate = (v: Vessel, part: PlacedPart, catalog: PartCatalog = PAR
   return (def.weapon?.fireRate ?? 0) * (part.hp / def.maxHp) * v.stats.efficiency;
 };
 
-// The longest reach of any weapon aboard, or 0 for an unarmed ship.
+// The range at which every weapon aboard can reach: the shortest weapon range, or 0 for an unarmed ship.
 export function weaponRange(v: Vessel, catalog: PartCatalog = PARTS): number {
-  let range = 0;
-  for (const part of v.ship.values()) range = Math.max(range, catalog[part.type].weapon?.range ?? 0);
-  return range;
+  let range = Infinity;
+  for (const part of v.ship.values()) range = Math.min(range, catalog[part.type].weapon?.range ?? Infinity);
+  return range === Infinity ? 0 : range;
 }
 
 export type Volley = { projectiles: Projectile[]; beams: BeamShot[] };
