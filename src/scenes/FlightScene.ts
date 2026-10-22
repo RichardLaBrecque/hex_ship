@@ -6,11 +6,13 @@ import { cargoUnits } from "../economy/contracts";
 import { bountyFor, destination, type TripResult, type Run } from "../economy/run";
 import type { Input } from "../engine/input";
 import type { Scene } from "../engine/scene";
-import { hex, type Point } from "../hex/hex";
+import { BURSTS, burst, drawParticles, emitCount, exhaust, stepParticles, type Particle } from "../fx/particles";
+import { addTrauma, decayTrauma, shakeOffset } from "../fx/shake";
+import { directionAngle, hex, type Point } from "../hex/hex";
 import { drawPart, drawShip } from "../render/drawShip";
 import { drawText, THEME } from "../render/ui";
 import { repairShip } from "../ship/damage";
-import type { PlacedPart } from "../ship/ship";
+import { forwardFactor, isExhaustBlocked, type PlacedPart } from "../ship/ship";
 import { computeShipStats } from "../ship/stats";
 import { aiControls, type AiMode } from "../sim/ai";
 import { burnFuel } from "../sim/fuel";
@@ -39,6 +41,15 @@ const STAR_LAYERS = [
 ];
 const CAMERA_FOLLOW = 6; // higher = camera sticks closer to the ship
 
+// Effects. Purely visual: nothing here changes the fight.
+const EXHAUST_RATE = 45; // puffs per second per engine at full thrust
+const MISSILE_SMOKE_RATE = 40; // puffs per second behind each missile
+const MISSILE_SMOKE = "#8a93a8";
+const TRAUMA_PER_DAMAGE = 1 / 60; // screen shake added per point of damage to the player's ship
+const TRAUMA_PART_LOST = 0.3; // extra shake when the player loses a part
+const TRAUMA_KILL = 0.35; // shake from an enemy exploding right next to you; less further away
+const TRAUMA_KILL_RANGE = 600; // pixels at which an enemy exploding no longer shakes the screen
+
 export class FlightScene implements Scene {
   private from: Planet;
   private to: Planet;
@@ -47,6 +58,8 @@ export class FlightScene implements Scene {
   private projectiles: Projectile[] = [];
   private beams: Beam[] = [];
   private debris: Debris[] = [];
+  private particles: Particle[] = [];
+  private trauma = 0; // screen shake, 0..1
   private danger: number;
   private encounters: Encounter[]; // still to come, in route order
   private bounty = 0;
@@ -121,6 +134,8 @@ export class FlightScene implements Scene {
     this.stepWorld(dt);
     if (isWrecked(player)) {
       this.wreckTimer = COMBAT.wreckDelay;
+      this.explode(player);
+      this.trauma = 1;
       return;
     }
 
@@ -170,10 +185,11 @@ export class FlightScene implements Scene {
       const downed = volley.intercepts.map((i) => i.missile);
       this.projectiles = this.projectiles.filter((p) => !downed.includes(p));
       this.beams.push(...volley.intercepts.map((i) => i.beam));
+      for (const { missile } of volley.intercepts) this.particles.push(...burst(missile, BURSTS.intercept, Math.random));
       this.projectiles.push(...volley.projectiles);
       for (const shot of volley.beams) {
         this.beams.push(shot.beam);
-        if (shot.key) this.hit(shot.target, shot.key, shot.damage);
+        if (shot.key) this.hit(shot.target, shot.key, shot.damage, shot.beam.to);
       }
     }
 
@@ -182,7 +198,7 @@ export class FlightScene implements Scene {
     for (const p of this.projectiles) {
       const moved = stepProjectile(p, dt);
       const struck = projectileHit(moved, targets);
-      if (struck) this.hit(struck.vessel, struck.key, moved.damage);
+      if (struck) this.hit(struck.vessel, struck.key, moved.damage, moved);
       else if (moved.life > 0) flying.push(moved);
     }
     this.projectiles = flying;
@@ -191,6 +207,9 @@ export class FlightScene implements Scene {
       if (!isWrecked(enemy.vessel)) continue;
       this.bounty += enemy.bounty;
       this.kills += 1;
+      this.explode(enemy.vessel);
+      const nearby = Math.max(0, 1 - distance(enemy.vessel.body, player.body) / TRAUMA_KILL_RANGE);
+      this.trauma = addTrauma(this.trauma, TRAUMA_KILL * nearby);
     }
     this.enemies = this.enemies.filter((e) => !isWrecked(e.vessel));
 
@@ -198,6 +217,36 @@ export class FlightScene implements Scene {
     this.debris = this.debris
       .map((d) => ({ ...d, x: d.x + d.vx * dt, y: d.y + d.vy * dt, angle: d.angle + d.spin * dt, age: d.age + dt }))
       .filter((d) => d.age < COMBAT.debrisLife);
+
+    if (alive) this.emitExhaust(player, this.thrust, dt);
+    for (const enemy of this.enemies) this.emitExhaust(enemy.vessel, enemy.thrust, dt);
+    for (const p of this.projectiles) {
+      if (p.kind !== "missile") continue;
+      for (let i = emitCount(MISSILE_SMOKE_RATE, dt, Math.random); i > 0; i--) {
+        this.particles.push(exhaust(p, Math.atan2(-p.vy, -p.vx), { x: 0, y: 0 }, Math.random, MISSILE_SMOKE));
+      }
+    }
+    this.particles = stepParticles(this.particles, dt);
+    this.trauma = decayTrauma(this.trauma, dt);
+  }
+
+  // Puffs out of every engine that is pushing the ship forward.
+  private emitExhaust(v: Vessel, thrust: number, dt: number): void {
+    if (thrust <= 0) return;
+    for (const part of v.ship.values()) {
+      if (part.type !== "engine" || isExhaustBlocked(v.ship, part) || forwardFactor(part.rotation) === 0) continue;
+      const angle = v.body.angle + directionAngle(part.rotation);
+      const center = hexWorld(v, part);
+      const nozzle = { x: center.x + Math.cos(angle) * FLIGHT.hexSize, y: center.y + Math.sin(angle) * FLIGHT.hexSize };
+      for (let i = emitCount(EXHAUST_RATE * thrust, dt, Math.random); i > 0; i--) {
+        this.particles.push(exhaust(nozzle, angle, { x: v.body.vx, y: v.body.vy }, Math.random));
+      }
+    }
+  }
+
+  // A whole ship going up.
+  private explode(v: Vessel): void {
+    this.particles.push(...burst(v.body, BURSTS.shipDestroyed, Math.random, { x: v.body.vx, y: v.body.vy }));
   }
 
   // Shields recharge and crew patch up damaged parts.
@@ -207,8 +256,18 @@ export class FlightScene implements Scene {
     if (repaired !== v.ship) setShip(v, repaired);
   }
 
-  private hit(v: Vessel, key: string, damage: number): void {
-    const { detached } = applyHit(v, key, damage);
+  // `at` is where the shot landed, for sparks.
+  private hit(v: Vessel, key: string, damage: number, at: Point): void {
+    const shieldBefore = v.shield;
+    const { destroyed, detached } = applyHit(v, key, damage);
+    const throughShield = damage - (shieldBefore - v.shield);
+    const drift = { x: v.body.vx, y: v.body.vy };
+    this.particles.push(...burst(at, throughShield > 0 ? BURSTS.hullHit : BURSTS.shieldHit, Math.random, drift));
+    if (destroyed) this.particles.push(...burst(hexWorld(v, destroyed), BURSTS.partDestroyed, Math.random, drift));
+    if (v === this.player) {
+      this.trauma = addTrauma(this.trauma, throughShield * TRAUMA_PER_DAMAGE + (destroyed ? TRAUMA_PART_LOST : 0));
+    }
+
     for (const part of detached) {
       const p = hexWorld(v, part);
       this.debris.push({
@@ -242,8 +301,9 @@ export class FlightScene implements Scene {
     ctx.fillRect(0, 0, width, height);
     this.renderStars(ctx, width, height);
 
+    const shake = shakeOffset(this.trauma, Math.random);
     ctx.save();
-    ctx.translate(width / 2 - this.camera.x, height / 2 - this.camera.y);
+    ctx.translate(width / 2 - this.camera.x + shake.x, height / 2 - this.camera.y + shake.y);
     this.renderPlanet(ctx, this.from, false);
     this.renderPlanet(ctx, this.to, true);
     this.renderDebris(ctx);
@@ -253,6 +313,7 @@ export class FlightScene implements Scene {
     }
     this.renderVessel(ctx, this.player, this.thrust);
     this.renderShots(ctx);
+    drawParticles(ctx, this.particles);
     ctx.restore();
 
     this.renderEdgeArrow(ctx, width, height, this.to, THEME.good);
@@ -433,7 +494,7 @@ export class FlightScene implements Scene {
     if (this.inDockZone()) {
       drawText(ctx, "Slow down to dock", width / 2, height - 70, { align: "center", size: 18, bold: true, color: THEME.warn });
     }
-    drawText(ctx, "W / ↑ thrust · S / ↓ brake · A D / ← → turn · weapons fire on their own · Esc turn back", width / 2, height - 24, {
+    drawText(ctx, `W / ↑ thrust · S / ↓ brake · A D / ← → turn · weapons fire on their own · Esc turn back`, width / 2, height - 24, {
       align: "center",
       color: THEME.muted,
     });
