@@ -50,6 +50,7 @@ function testRun(overrides: Partial<Run> = {}): Run {
     cargo: [],
     delivered: 0,
     kills: 0,
+    valueTier: 1,
     peakShipValue: 0,
     cargoEarned: 0,
     bountiesEarned: 0,
@@ -283,6 +284,12 @@ describe("launch", () => {
   it("records a new peak ship value", () => {
     // engine $100 + fuel $20 + cargo $10
     expect(ok(launch(testRun({ peakShipValue: 99 }), TEST_PARTS, TEST_ECONOMY)).peakShipValue).toBe(130);
+  });
+
+  it("sets the ship-value danger tier from the ship launched", () => {
+    // $130 of parts passes a $100 checkpoint
+    const danger = { valueCheckpoints: [100], dropBuffer: 0, killsPerTier: 9, levels: [[], []] };
+    expect(ok(launch(testRun({ valueTier: 1 }), TEST_PARTS, TEST_ECONOMY, danger)).valueTier).toBe(2);
   });
 
   it("keeps an earlier, higher peak ship value", () => {

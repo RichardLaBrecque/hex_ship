@@ -1,5 +1,6 @@
 import { COMBAT, ECONOMY, FLIGHT, PLANETS, type Planet } from "../data/balance";
-import { ENCOUNTERS, ENEMY_TIERS } from "../data/enemies";
+import { DANGER, ENCOUNTERS, ENEMY_TIERS, type Encounter } from "../data/enemies";
+import { dangerTier } from "../economy/danger";
 import { PARTS } from "../data/parts";
 import { cargoUnits } from "../economy/contracts";
 import { bountyFor, destination, type TripResult, type Run } from "../economy/run";
@@ -46,7 +47,8 @@ export class FlightScene implements Scene {
   private projectiles: Projectile[] = [];
   private beams: Beam[] = [];
   private debris: Debris[] = [];
-  private encounters = [...ENCOUNTERS.at];
+  private danger: number;
+  private encounters: Encounter[]; // still to come, in route order
   private bounty = 0;
   private kills = 0;
   private wreckTimer: number | null = null; // counts down to Game Over once the core is lost
@@ -63,6 +65,8 @@ export class FlightScene implements Scene {
     this.from = PLANETS[run.docked];
     this.to = PLANETS[destination(run)];
     this.fuel = run.fuel;
+    this.danger = dangerTier(run);
+    this.encounters = [...DANGER.levels[this.danger - 1]];
 
     const heading = Math.atan2(this.to.y - this.from.y, this.to.x - this.from.x);
     const startDistance = this.from.radius + 80;
@@ -110,9 +114,8 @@ export class FlightScene implements Scene {
     // A destroyed tank takes its fuel with it.
     this.fuel = Math.min(player.stats.fuelCapacity, burnFuel(this.fuel, enginePower(this.thrust), player.stats.fuelBurn, dt));
 
-    if (this.encounters.length > 0 && this.routeProgress() >= this.encounters[0]) {
-      this.encounters.shift();
-      this.spawnEnemy();
+    if (this.encounters.length > 0 && this.routeProgress() >= this.encounters[0].at) {
+      for (const tier of this.encounters.shift()!.enemies) this.spawnEnemy(tier);
     }
 
     this.stepWorld(dt);
@@ -130,8 +133,9 @@ export class FlightScene implements Scene {
     if (this.inDockZone() && speed(player.body) < FLIGHT.dockSpeed) this.options.onArrive(this.trip());
   }
 
-  private spawnEnemy(): void {
-    const tier = ENEMY_TIERS[0];
+  // `level` is the enemy tier, starting at 1.
+  private spawnEnemy(level: number): void {
+    const tier = ENEMY_TIERS[level - 1];
     const ship = buildEnemy(tier, Math.random);
     const body = spawnBody(this.player.body, this.to, Math.random);
     const crew = computeShipStats(ship, 0).crewRequired; // enemies are always fully crewed
@@ -403,7 +407,7 @@ export class FlightScene implements Scene {
     drawText(ctx, `Hull ${Math.round(s.hull)} / ${Math.round(s.maxHull)}`, 20, 90, { color: THEME.muted });
     drawText(ctx, `Shield ${Math.round(this.player.shield)} / ${Math.round(s.shieldMax)}`, 20, 110, { color: THEME.muted });
     drawText(ctx, `Cargo ${cargoUnits(this.options.run.cargo)} / ${s.cargoCapacity} units`, 20, 130, { color: THEME.muted });
-    drawText(ctx, `Day ${this.options.run.day}  ·  $${this.options.run.money}`, 20, 150, { color: THEME.muted });
+    drawText(ctx, `Day ${this.options.run.day}  ·  $${this.options.run.money}  ·  Danger ${this.danger}`, 20, 150, { color: THEME.muted });
     drawText(ctx, `Bounties $${this.bounty} (${this.kills} kill${this.kills === 1 ? "" : "s"})`, 20, 170, {
       color: this.bounty > 0 ? THEME.good : THEME.muted,
     });

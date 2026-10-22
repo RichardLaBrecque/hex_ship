@@ -50,7 +50,7 @@ describe("buildEnemy", () => {
 });
 
 describe("spawnBody", () => {
-  const ENC = { at: [], spawnDistance: 100, spawnSpread: 60, despawnDistance: 999 };
+  const ENC = { spawnDistance: 100, spawnSpread: 60, despawnDistance: 999 };
 
   it("appears ahead of the player along the route, facing the player", () => {
     // random 0.5 means no spread

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ECONOMY, PLANETS } from "../src/data/balance";
-import { ENEMY_TIERS } from "../src/data/enemies";
+import { DANGER, ENEMY_TIERS } from "../src/data/enemies";
 import { BUILDABLE, PARTS } from "../src/data/parts";
 import { repairCost, sellValue } from "../src/economy/shop";
 import { hex } from "../src/hex/hex";
@@ -82,5 +82,36 @@ describe("balance", () => {
         }
       }
     });
+  });
+
+  describe.each(ENEMY_TIERS.map((tier, i) => ({ tier, level: i + 1 })))("tier-$level enemies ($tier.name)", ({ tier }) => {
+    const enemies = Array.from({ length: 200 }, (_, i) => buildEnemy(tier, seeded(i + 1)));
+
+    it("are spaceworthy by the same rules as the player's ship", () => {
+      for (const ship of enemies) expect(validateShip(ship).problems).toEqual([]);
+    });
+
+    it("stay within 15% under their budget and never go over", () => {
+      for (const ship of enemies) {
+        expect(shipValue(ship)).toBeGreaterThanOrEqual(tier.budget.min * 0.85);
+        expect(shipValue(ship)).toBeLessThanOrEqual(tier.budget.max);
+      }
+    });
+  });
+
+  it("each enemy tier costs more and aims better than the one below", () => {
+    for (let i = 1; i < ENEMY_TIERS.length; i++) {
+      expect(ENEMY_TIERS[i].budget.min).toBeGreaterThan(ENEMY_TIERS[i - 1].budget.max);
+      expect(ENEMY_TIERS[i].aimError).toBeLessThan(ENEMY_TIERS[i - 1].aimError);
+    }
+  });
+
+  it("every danger level only sends enemy tiers that exist", () => {
+    for (const level of DANGER.levels) {
+      for (const encounter of level) {
+        for (const tier of encounter.enemies) expect(ENEMY_TIERS[tier - 1]).toBeDefined();
+      }
+    }
+    expect(DANGER.levels).toHaveLength(DANGER.valueCheckpoints.length + 1);
   });
 });

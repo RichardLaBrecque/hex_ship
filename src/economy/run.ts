@@ -3,7 +3,9 @@ import { PARTS, type PartCatalog } from "../data/parts";
 import { shipValue, starterShip, type Ship } from "../ship/ship";
 import { computeShipStats } from "../ship/stats";
 import { validateShip } from "../ship/validate";
+import { DANGER, type Danger } from "../data/enemies";
 import { cargoUnits, contractPay, generateOffers, type Contract } from "./contracts";
+import { valueTier } from "./danger";
 import { hiringFees, wages } from "./crew";
 
 // Everything about the current run. Actions return a new Run instead of changing this one.
@@ -19,6 +21,7 @@ export type Run = {
   readonly cargo: readonly Contract[]; // contracts loaded aboard, paid on arrival
   readonly delivered: number; // contracts delivered this run: reputation
   readonly kills: number; // enemy ships destroyed this run: notoriety
+  readonly valueTier: number; // ship-value danger tier as of the last launch (see danger.ts)
   // The score, kept as three separate columns.
   readonly peakShipValue: number; // the most the ship's parts were worth at any launch
   readonly cargoEarned: number; // total paid for delivered contracts
@@ -44,6 +47,7 @@ export function newRun(random: Random = Math.random, econ: Economy = ECONOMY): R
     cargo: [],
     delivered: 0,
     kills: 0,
+    valueTier: 1,
     peakShipValue: shipValue(ship),
     cargoEarned: 0,
     bountiesEarned: 0,
@@ -78,8 +82,8 @@ export function launchProblems(run: Run, catalog: PartCatalog = PARTS, econ: Eco
 }
 
 // Pays wages and any new crew's signing fees. Everyone aboard is now signed.
-// The ship's value at launch counts toward the peak ship value score.
-export function launch(run: Run, catalog: PartCatalog = PARTS, econ: Economy = ECONOMY): Outcome {
+// The ship's value at launch sets its danger tier and counts toward the peak ship value score.
+export function launch(run: Run, catalog: PartCatalog = PARTS, econ: Economy = ECONOMY, danger: Danger = DANGER): Outcome {
   const problems = launchProblems(run, catalog, econ);
   if (problems.length > 0) return { ok: false, reason: problems[0] };
   const value = shipValue(run.ship, catalog);
@@ -89,6 +93,7 @@ export function launch(run: Run, catalog: PartCatalog = PARTS, econ: Economy = E
       ...run,
       money: run.money - launchCost(run, econ),
       crewSigned: run.crew,
+      valueTier: valueTier(value, run.valueTier, danger),
       peakShipValue: Math.max(run.peakShipValue, value),
     },
   };

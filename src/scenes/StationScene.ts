@@ -2,6 +2,7 @@ import { ECONOMY, PLANETS } from "../data/balance";
 import { BUILDABLE, PARTS, type PartId } from "../data/parts";
 import { cargoUnits, contractPay, loadContract, reputation, unloadContract, type Contract } from "../economy/contracts";
 import { fireCrew, hireCrew, hiringFees, wages } from "../economy/crew";
+import { dangerOutlook, type DangerOutlook } from "../economy/danger";
 import { refuel, refuelCost } from "../economy/fuel";
 import { destination, expectedPay, launchCost, launchProblems, tripDistance, type Outcome, type Run } from "../economy/run";
 import { buyPart, repairAll, repairCost, sellPart, sellValue } from "../economy/shop";
@@ -233,7 +234,11 @@ export class StationScene implements Scene {
   private renderTopBar(ctx: CanvasRenderingContext2D): void {
     const planet = PLANETS[this.run.docked];
     drawText(ctx, `Docked at ${planet.name}`, this.gridCenter.x, 28, { align: "center", size: 18, bold: true, color: planet.color });
-    drawText(ctx, `Day ${this.run.day}  ·  $${this.run.money}`, this.gridCenter.x, 50, { align: "center", size: 15, bold: true });
+    drawText(ctx, `Day ${this.run.day}  ·  $${this.run.money}  ·  ${dangerText(dangerOutlook(this.run))}`, this.gridCenter.x, 50, {
+      align: "center",
+      size: 15,
+      bold: true,
+    });
     if (this.messageTimer > 0) {
       drawText(ctx, this.message, this.gridCenter.x, TOP_BAR + 8, { align: "center", size: 15, bold: true, color: this.messageColor });
     }
@@ -613,3 +618,12 @@ function partDetails(id: PartId): string[] {
 }
 
 const fmt = (n: number, digits = 0): string => n.toFixed(digits);
+
+// e.g. "Danger 2 (next at $1200 ship value or 13 more kills)"
+function dangerText(outlook: DangerOutlook): string {
+  const next = [
+    outlook.nextValue !== null ? `$${outlook.nextValue} ship value` : null,
+    outlook.killsToNext !== null ? `${outlook.killsToNext} more kill${outlook.killsToNext === 1 ? "" : "s"}` : null,
+  ].filter((part) => part !== null);
+  return next.length > 0 ? `Danger ${outlook.tier} (next at ${next.join(" or ")})` : `Danger ${outlook.tier} (max)`;
+}
