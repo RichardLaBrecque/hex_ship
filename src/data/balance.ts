@@ -2,10 +2,10 @@
 
 export const FLIGHT = {
   hexSize: 12, // pixels per hex when flying
-  thrustScale: 40, // ship acceleration stat → pixels/s²
+  thrustScale: 30, // ship acceleration stat → pixels/s²
   reverseFactor: 0.5, // braking strength as a share of forward thrust
   turnScale: 1.2, // ship turn-rate stat → radians/s
-  drag: 0.55, // per second; top speed ≈ acceleration × thrustScale / drag
+  drag: 0.3, // per second; lower is slidier. Top speed ≈ acceleration × thrustScale / drag
   dockSpeed: 80, // must be slower than this (pixels/s) to dock
 };
 
