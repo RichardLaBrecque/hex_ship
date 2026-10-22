@@ -5,6 +5,7 @@ import { SceneManager } from "./engine/scene";
 import { FlightScene } from "./scenes/FlightScene";
 import { GameOverScene } from "./scenes/GameOverScene";
 import { StationScene } from "./scenes/StationScene";
+import { addScore, loadRecords, saveRecords, scoreOf } from "./save/records";
 import { clearRun, loadRun, saveRun } from "./save/save";
 
 const canvas = document.getElementById("game") as HTMLCanvasElement;
@@ -52,12 +53,17 @@ function startTrip(docked: Run): void {
         trip.fuel > 0
           ? openStation(afterFlight(flying, trip), withBounty("Turned back. Wages aren't refunded.", trip.bounty))
           : openStation(towBack(afterFlight(flying, trip)), withBounty("Towed back on an empty tank.", trip.bounty)),
-      onDestroyed: () => {
-        clearRun();
-        scenes.switchTo(new GameOverScene({ run: flying, onRestart: () => openStation(newRun()) }));
-      },
+      onDestroyed: () => endRun(flying),
     }),
   );
+}
+
+// The core is lost: the save goes and the score joins the records.
+function endRun(run: Run): void {
+  clearRun();
+  const { records, newBests } = addScore(loadRecords(), scoreOf(run));
+  saveRecords(records);
+  scenes.switchTo(new GameOverScene({ run, records, newBests, onRestart: () => openStation(newRun()) }));
 }
 
 const withBounty = (report: string, bounty: number): string => (bounty > 0 ? `${report} Bounties: +$${bounty}` : report);
