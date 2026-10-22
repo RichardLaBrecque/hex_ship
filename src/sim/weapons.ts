@@ -49,11 +49,16 @@ export function bearingTo(mount: Mount, weapon: WeaponStats, point: Point): numb
   return Math.abs(angleDiff(bearing, mount.angle)) <= (weapon.arc * Math.PI) / 180 ? bearing : null;
 }
 
+// Damage and crew shortages slow a weapon down by this share.
+const readiness = (v: Vessel, part: PlacedPart, catalog: PartCatalog): number => (part.hp / catalog[part.type].maxHp) * v.stats.efficiency;
+
 // Shots per second after damage and crew shortages.
-export const fireRate = (v: Vessel, part: PlacedPart, catalog: PartCatalog = PARTS): number => {
-  const def = catalog[part.type];
-  return (def.weapon?.fireRate ?? 0) * (part.hp / def.maxHp) * v.stats.efficiency;
-};
+export const fireRate = (v: Vessel, part: PlacedPart, catalog: PartCatalog = PARTS): number =>
+  (catalog[part.type].weapon?.fireRate ?? 0) * readiness(v, part, catalog);
+
+// Missiles shot down per second after damage and crew shortages.
+export const interceptRate = (v: Vessel, part: PlacedPart, catalog: PartCatalog = PARTS): number =>
+  (catalog[part.type].weapon?.intercept ?? 0) * readiness(v, part, catalog);
 
 // The range at which every weapon aboard can reach: the shortest weapon range, or 0 for an unarmed ship.
 export function weaponRange(v: Vessel, catalog: PartCatalog = PARTS): number {
@@ -62,20 +67,25 @@ export function weaponRange(v: Vessel, catalog: PartCatalog = PARTS): number {
   return range === Infinity ? 0 : range;
 }
 
-export type Volley = { projectiles: Projectile[]; beams: BeamShot[] };
+// A missile shot down by a laser; the caller removes it from flight.
+export type Intercept = { beam: Beam; missile: Projectile };
+
+export type Volley = { projectiles: Projectile[]; beams: BeamShot[]; intercepts: Intercept[] };
 
 // Counts down reloads and fires every loaded weapon that can bear on a target.
-// Each weapon shoots at the first target in `targets` it can reach.
+// A weapon that can intercept shoots down the first incoming missile it can reach, then reloads for 1 / intercept rate.
+// Otherwise each weapon shoots at the first target in `targets` it can reach.
 export function fireWeapons(
   v: Vessel,
   targets: readonly Vessel[],
+  incoming: readonly Projectile[],
   dt: number,
   size: number = FLIGHT.hexSize,
   catalog: PartCatalog = PARTS,
   tuning: Combat = COMBAT,
   random: () => number = Math.random,
 ): Volley {
-  const volley: Volley = { projectiles: [], beams: [] };
+  const volley: Volley = { projectiles: [], beams: [], intercepts: [] };
   for (const [key, part] of v.ship) {
     const weapon = catalog[part.type].weapon;
     if (!weapon) continue;
@@ -85,6 +95,23 @@ export function fireWeapons(
     if (reload > 0 || rate <= 0) continue;
 
     const mount = mountOf(v, part, size);
+    const intercept = interceptRate(v, part, catalog);
+    const missile =
+      intercept > 0
+        ? incoming.find(
+            (p) =>
+              p.kind === "missile" &&
+              p.side !== v.side &&
+              !volley.intercepts.some((i) => i.missile === p) &&
+              bearingTo(mount, weapon, p) !== null,
+          )
+        : undefined;
+    if (missile) {
+      volley.intercepts.push({ beam: { from: mount, to: { x: missile.x, y: missile.y }, age: 0 }, missile });
+      v.reload.set(key, 1 / intercept);
+      continue;
+    }
+
     for (const target of targets) {
       const aimed = bearingTo(mount, weapon, aimPoint(mount, target.body, weapon.speed));
       if (aimed === null) continue;

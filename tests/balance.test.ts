@@ -41,6 +41,10 @@ describe("balance", () => {
     }
   });
 
+  it("one laser shoots down every other missile from a missile pod", () => {
+    expect(PARTS.laser.weapon!.intercept).toBe(PARTS.missile.weapon!.fireRate / 2);
+  });
+
   describe("contract tiers", () => {
     const tiers = ECONOMY.contractTiers;
 

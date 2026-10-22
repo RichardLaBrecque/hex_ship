@@ -613,7 +613,9 @@ function partDetails(id: PartId): string[] {
   if (def.weapon) {
     const w = def.weapon;
     lines.push(`Damage ${w.damage} × ${w.fireRate}/s`);
-    lines.push(`Range ${w.range} · Arc ±${w.arc}°`);  }
+    lines.push(`Range ${w.range} · Arc ±${w.arc}°`);
+    if (w.intercept > 0) lines.push(`Shoots down 1 missile every ${fmt(1 / w.intercept)}s`);
+  }
   return lines;
 }
 

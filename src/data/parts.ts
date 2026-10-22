@@ -18,6 +18,7 @@ export type WeaponStats = {
   range: number; // pixels
   arc: number; // half-angle of the firing arc, degrees
   speed: number; // projectile pixels per second; 0 for beams
+  intercept: number; // incoming missiles it can shoot down per second; 0 if it can't
 };
 
 export type PartDef = {
@@ -111,13 +112,14 @@ export const PARTS: PartCatalog = {
     ...BLANK,
     id: "laser",
     name: "Laser Pod",
-    description: "Hits instantly and never misses. Short range.",
+    description: "Hits instantly and never misses. Short range. Shoots down incoming missiles first: one laser stops every other missile from a pod.",
     color: "#e0457b",
     cost: 150,
     mass: 3,
     maxHp: 20,
     crewRequired: 1,
-    weapon: { kind: "beam", damage: 8, fireRate: 2, range: 350, arc: 45, speed: 0 },
+    // intercept: half a missile pod's fire rate (tests/balance.test.ts)
+    weapon: { kind: "beam", damage: 8, fireRate: 2, range: 350, arc: 45, speed: 0, intercept: 0.2 },
   },
   cannon: {
     ...BLANK,
@@ -129,7 +131,7 @@ export const PARTS: PartCatalog = {
     mass: 5,
     maxHp: 25,
     crewRequired: 1,
-    weapon: { kind: "shell", damage: 15, fireRate: 1, range: 450, arc: 30, speed: 520 },
+    weapon: { kind: "shell", damage: 15, fireRate: 1, range: 450, arc: 30, speed: 520, intercept: 0 },
   },
   missile: {
     ...BLANK,
@@ -141,7 +143,7 @@ export const PARTS: PartCatalog = {
     mass: 4,
     maxHp: 20,
     crewRequired: 1,
-    weapon: { kind: "missile", damage: 30, fireRate: 0.4, range: 600, arc: 90, speed: 300 },
+    weapon: { kind: "missile", damage: 30, fireRate: 0.4, range: 600, arc: 90, speed: 300, intercept: 0 },
   },
   cargo: {
     ...BLANK,

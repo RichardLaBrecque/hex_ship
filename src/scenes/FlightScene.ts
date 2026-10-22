@@ -163,9 +163,13 @@ export class FlightScene implements Scene {
     for (const v of [player, ...this.enemies.map((e) => e.vessel)]) this.upkeep(v, dt);
 
     const enemyVessels = this.enemies.map((e) => e.vessel).sort((a, b) => distance(a.body, player.body) - distance(b.body, player.body));
-    const volleys = alive ? [fireWeapons(player, enemyVessels, dt)] : [];
-    if (alive) for (const v of enemyVessels) volleys.push(fireWeapons(v, [player], dt));
-    for (const volley of volleys) {
+    // Each volley lands before the next ship fires, so two ships never shoot down the same missile.
+    const shooters = alive ? [player, ...enemyVessels] : [];
+    for (const v of shooters) {
+      const volley = fireWeapons(v, v === player ? enemyVessels : [player], this.projectiles, dt);
+      const downed = volley.intercepts.map((i) => i.missile);
+      this.projectiles = this.projectiles.filter((p) => !downed.includes(p));
+      this.beams.push(...volley.intercepts.map((i) => i.beam));
       this.projectiles.push(...volley.projectiles);
       for (const shot of volley.beams) {
         this.beams.push(shot.beam);

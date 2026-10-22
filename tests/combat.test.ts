@@ -99,7 +99,7 @@ describe("aimPoint", () => {
 describe("fireWeapons", () => {
   it("fires a shell from a loaded cannon at a target in its arc", () => {
     const shooter = vessel("player", build([0, 0, "bridge", 0], [1, 0, "cannon", 0]), at(0, 0));
-    const volley = fireWeapons(shooter, [dot("enemy", 60, 0)], 0.01, SIZE, TEST_PARTS);
+    const volley = fireWeapons(shooter, [dot("enemy", 60, 0)], [], 0.01, SIZE, TEST_PARTS);
     expect(volley.projectiles).toHaveLength(1);
     expect(volley.projectiles[0].vx).toBeCloseTo(100);
     expect(volley.projectiles[0].damage).toBe(10);
@@ -109,7 +109,7 @@ describe("fireWeapons", () => {
     const shooter = vessel("enemy", build([0, 0, "bridge", 0], [1, 0, "cannon", 0]), at(0, 0));
     shooter.aimError = 9;
     // random 1 = the widest miss, clockwise
-    const volley = fireWeapons(shooter, [dot("player", 60, 0)], 0.01, SIZE, TEST_PARTS, COMBAT, () => 1);
+    const volley = fireWeapons(shooter, [dot("player", 60, 0)], [], 0.01, SIZE, TEST_PARTS, COMBAT, () => 1);
     const shell = volley.projectiles[0];
     expect(Math.atan2(shell.vy, shell.vx)).toBeCloseTo((9 * Math.PI) / 180);
   });
@@ -117,23 +117,78 @@ describe("fireWeapons", () => {
   it("waits for the weapon to reload", () => {
     const shooter = vessel("player", build([0, 0, "bridge", 0], [1, 0, "cannon", 0]), at(0, 0));
     const target = dot("enemy", 60, 0);
-    fireWeapons(shooter, [target], 0.01, SIZE, TEST_PARTS);
-    expect(fireWeapons(shooter, [target], 0.5, SIZE, TEST_PARTS).projectiles).toHaveLength(0);
-    expect(fireWeapons(shooter, [target], 0.5, SIZE, TEST_PARTS).projectiles).toHaveLength(1);
+    fireWeapons(shooter, [target], [], 0.01, SIZE, TEST_PARTS);
+    expect(fireWeapons(shooter, [target], [], 0.5, SIZE, TEST_PARTS).projectiles).toHaveLength(0);
+    expect(fireWeapons(shooter, [target], [], 0.5, SIZE, TEST_PARTS).projectiles).toHaveLength(1);
   });
 
   it("holds fire when nothing is in the arc", () => {
     const shooter = vessel("player", build([0, 0, "bridge", 0], [1, 0, "cannon", 0]), at(0, 0));
-    expect(fireWeapons(shooter, [dot("enemy", -60, 0)], 0.01, SIZE, TEST_PARTS).projectiles).toHaveLength(0);
+    expect(fireWeapons(shooter, [dot("enemy", -60, 0)], [], 0.01, SIZE, TEST_PARTS).projectiles).toHaveLength(0);
   });
 
   it("hits the first part along a laser beam", () => {
     const shooter = vessel("player", build([0, 0, "bridge", 0], [1, 0, "laser", 0]), at(0, 0));
     // target: armor in front of its bridge, facing the shooter
     const target = vessel("enemy", build([0, 0, "bridge", 0], [-1, 0, "armor", 0]), at(70, 0));
-    const volley = fireWeapons(shooter, [target], 0.01, SIZE, TEST_PARTS);
+    const volley = fireWeapons(shooter, [target], [], 0.01, SIZE, TEST_PARTS);
     expect(volley.beams[0].key).toBe("-1,0");
     expect(volley.beams[0].damage).toBe(5);
+  });
+
+  describe("intercepting missiles", () => {
+    const missile = (side: Side, x: number, y: number): Projectile => ({
+      kind: "missile",
+      side,
+      x,
+      y,
+      vx: -50,
+      vy: 0,
+      damage: 20,
+      life: 1,
+      target: dot("player", 0, 0),
+    });
+
+    it("shoots down an incoming missile instead of firing at a ship", () => {
+      const shooter = vessel("player", build([0, 0, "bridge", 0], [1, 0, "laser", 0]), at(0, 0));
+      const incoming = missile("enemy", 60, 0);
+      const volley = fireWeapons(shooter, [dot("enemy", 90, 0)], [incoming], 0.01, SIZE, TEST_PARTS);
+      expect(volley.intercepts).toHaveLength(1);
+      expect(volley.intercepts[0].missile).toBe(incoming);
+      expect(volley.intercepts[0].beam.to).toEqual({ x: 60, y: 0 });
+      expect(volley.beams).toHaveLength(0);
+    });
+
+    it("reloads for 1 / intercept rate afterwards", () => {
+      const shooter = vessel("player", build([0, 0, "bridge", 0], [1, 0, "laser", 0]), at(0, 0));
+      const target = dot("enemy", 90, 0);
+      fireWeapons(shooter, [target], [missile("enemy", 60, 0)], 0.01, SIZE, TEST_PARTS);
+      // TEST laser: intercept 0.5/s → 2s, against 0.5s between ordinary shots
+      expect(fireWeapons(shooter, [target], [], 1.9, SIZE, TEST_PARTS).beams).toHaveLength(0);
+      expect(fireWeapons(shooter, [target], [], 0.2, SIZE, TEST_PARTS).beams).toHaveLength(1);
+    });
+
+    it("ignores its own side's missiles", () => {
+      const shooter = vessel("player", build([0, 0, "bridge", 0], [1, 0, "laser", 0]), at(0, 0));
+      const volley = fireWeapons(shooter, [dot("enemy", 90, 0)], [missile("player", 60, 0)], 0.01, SIZE, TEST_PARTS);
+      expect(volley.intercepts).toHaveLength(0);
+      expect(volley.beams).toHaveLength(1);
+    });
+
+    it("sends each laser after a different missile", () => {
+      const shooter = vessel("player", build([0, 0, "bridge", 0], [1, 0, "laser", 0], [1, -1, "laser", 0]), at(0, 0));
+      const first = missile("enemy", 60, 0);
+      const second = missile("enemy", 60, 9);
+      const volley = fireWeapons(shooter, [], [first, second], 0.01, SIZE, TEST_PARTS);
+      expect(volley.intercepts.map((i) => i.missile)).toEqual([first, second]);
+    });
+
+    it("leaves missiles to weapons that can intercept", () => {
+      const shooter = vessel("player", build([0, 0, "bridge", 0], [1, 0, "cannon", 0]), at(0, 0));
+      const volley = fireWeapons(shooter, [dot("enemy", 90, 0)], [missile("enemy", 60, 0)], 0.01, SIZE, TEST_PARTS);
+      expect(volley.intercepts).toHaveLength(0);
+      expect(volley.projectiles).toHaveLength(1);
+    });
   });
 });
 
