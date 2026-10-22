@@ -1,3 +1,4 @@
+import type { Sound } from "../audio/sound";
 import { COMBAT, ECONOMY, FLIGHT, PLANETS, type Planet } from "../data/balance";
 import { DANGER, ENCOUNTERS, ENEMY_TIERS, type Encounter } from "../data/enemies";
 import { dangerTier } from "../economy/danger";
@@ -26,6 +27,7 @@ export type FlightOptions = {
   onArrive: (trip: TripResult) => void;
   onAbort: (trip: TripResult) => void; // fuel 0 means a tow is needed
   onDestroyed: () => void; // the core was destroyed
+  sound: Sound;
 };
 
 type Enemy = { vessel: Vessel; bounty: number; mode: AiMode; thrust: number };
@@ -41,7 +43,7 @@ const STAR_LAYERS = [
 ];
 const CAMERA_FOLLOW = 6; // higher = camera sticks closer to the ship
 
-// Effects. Purely visual: nothing here changes the fight.
+// Effects. Purely visual and audible: nothing here changes the fight.
 const EXHAUST_RATE = 45; // puffs per second per engine at full thrust
 const MISSILE_SMOKE_RATE = 40; // puffs per second behind each missile
 const MISSILE_SMOKE = "#8a93a8";
@@ -98,12 +100,17 @@ export class FlightScene implements Scene {
     return { fuel: this.fuel, ship: this.player.ship, bounty: this.bounty, kills: this.kills };
   }
 
+  exit(): void {
+    this.options.sound.thrust(0);
+  }
+
   update(dt: number, input: Input): void {
     this.time += dt;
 
     if (this.wreckTimer !== null) {
       this.wreckTimer -= dt;
       this.thrust = 0;
+      this.options.sound.thrust(0);
       this.stepWorld(dt);
       if (this.wreckTimer <= 0) this.options.onDestroyed();
       return;
@@ -126,6 +133,8 @@ export class FlightScene implements Scene {
     player.body = stepBody(player.body, { thrust: this.thrust, turn }, player.stats, dt);
     // A destroyed tank takes its fuel with it.
     this.fuel = Math.min(player.stats.fuelCapacity, burnFuel(this.fuel, enginePower(this.thrust), player.stats.fuelBurn, dt));
+    this.options.sound.setListener(player.body);
+    this.options.sound.thrust(enginePower(this.thrust));
 
     if (this.encounters.length > 0 && this.routeProgress() >= this.encounters[0].at) {
       for (const tier of this.encounters.shift()!.enemies) this.spawnEnemy(tier);
@@ -185,10 +194,18 @@ export class FlightScene implements Scene {
       const downed = volley.intercepts.map((i) => i.missile);
       this.projectiles = this.projectiles.filter((p) => !downed.includes(p));
       this.beams.push(...volley.intercepts.map((i) => i.beam));
-      for (const { missile } of volley.intercepts) this.particles.push(...burst(missile, BURSTS.intercept, Math.random));
+      for (const { missile } of volley.intercepts) {
+        this.particles.push(...burst(missile, BURSTS.intercept, Math.random));
+        this.options.sound.intercept(missile);
+      }
       this.projectiles.push(...volley.projectiles);
+      for (const p of volley.projectiles) {
+        if (p.kind === "missile") this.options.sound.missileLaunch(p);
+        else this.options.sound.cannon(p);
+      }
       for (const shot of volley.beams) {
         this.beams.push(shot.beam);
+        this.options.sound.laser(shot.beam.from);
         if (shot.key) this.hit(shot.target, shot.key, shot.damage, shot.beam.to);
       }
     }
@@ -247,6 +264,7 @@ export class FlightScene implements Scene {
   // A whole ship going up.
   private explode(v: Vessel): void {
     this.particles.push(...burst(v.body, BURSTS.shipDestroyed, Math.random, { x: v.body.vx, y: v.body.vy }));
+    this.options.sound.shipDestroyed(v.body);
   }
 
   // Shields recharge and crew patch up damaged parts.
@@ -256,14 +274,23 @@ export class FlightScene implements Scene {
     if (repaired !== v.ship) setShip(v, repaired);
   }
 
-  // `at` is where the shot landed, for sparks.
+  // `at` is where the shot landed, for sparks and sound.
   private hit(v: Vessel, key: string, damage: number, at: Point): void {
     const shieldBefore = v.shield;
     const { destroyed, detached } = applyHit(v, key, damage);
     const throughShield = damage - (shieldBefore - v.shield);
     const drift = { x: v.body.vx, y: v.body.vy };
-    this.particles.push(...burst(at, throughShield > 0 ? BURSTS.hullHit : BURSTS.shieldHit, Math.random, drift));
-    if (destroyed) this.particles.push(...burst(hexWorld(v, destroyed), BURSTS.partDestroyed, Math.random, drift));
+    if (throughShield > 0) {
+      this.particles.push(...burst(at, BURSTS.hullHit, Math.random, drift));
+      this.options.sound.hullHit(at);
+    } else {
+      this.particles.push(...burst(at, BURSTS.shieldHit, Math.random, drift));
+      this.options.sound.shieldHit(at);
+    }
+    if (destroyed) {
+      this.particles.push(...burst(hexWorld(v, destroyed), BURSTS.partDestroyed, Math.random, drift));
+      this.options.sound.partDestroyed(at);
+    }
     if (v === this.player) {
       this.trauma = addTrauma(this.trauma, throughShield * TRAUMA_PER_DAMAGE + (destroyed ? TRAUMA_PART_LOST : 0));
     }
@@ -494,7 +521,7 @@ export class FlightScene implements Scene {
     if (this.inDockZone()) {
       drawText(ctx, "Slow down to dock", width / 2, height - 70, { align: "center", size: 18, bold: true, color: THEME.warn });
     }
-    drawText(ctx, `W / ↑ thrust · S / ↓ brake · A D / ← → turn · weapons fire on their own · Esc turn back`, width / 2, height - 24, {
+    drawText(ctx, `W / ↑ thrust · S / ↓ brake · A D / ← → turn · weapons fire on their own · Esc turn back · M ${this.options.sound.isMuted ? "unmute" : "mute"}`, width / 2, height - 24, {
       align: "center",
       color: THEME.muted,
     });

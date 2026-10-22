@@ -1,3 +1,4 @@
+import { Sound } from "./audio/sound";
 import { afterFlight, arrive, launch, newRun, towBack, type Run } from "./economy/run";
 import { Input } from "./engine/input";
 import { startLoop } from "./engine/loop";
@@ -12,6 +13,10 @@ const canvas = document.getElementById("game") as HTMLCanvasElement;
 const ctx = canvas.getContext("2d")!;
 const input = new Input(canvas);
 const scenes = new SceneManager();
+const sound = new Sound();
+// Browsers only start audio from a key press or click.
+window.addEventListener("keydown", () => sound.unlock());
+window.addEventListener("pointerdown", () => sound.unlock());
 
 let width = 0;
 let height = 0;
@@ -44,7 +49,9 @@ function startTrip(docked: Run): void {
   scenes.switchTo(
     new FlightScene({
       run: flying,
+      sound,
       onArrive: (trip) => {
+        sound.dock();
         const { run, delivered, earned } = arrive(afterFlight(flying, trip));
         const report = delivered.length > 0 ? `Delivered ${delivered.length} contract(s): +$${earned}` : "Arrived with an empty hold.";
         openStation(run, withBounty(report, trip.bounty));
@@ -73,6 +80,7 @@ openStation(saved ?? newRun(), saved ? `Welcome back. Day ${saved.day}, $${saved
 
 startLoop(
   (dt) => {
+    if (input.wasPressed("KeyM")) sound.toggleMute();
     scenes.scene?.update(dt, input);
     input.endFrame();
   },

@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { loudness, MUTE_KEY, Sound } from "../src/audio/sound";
 import { burst, emitCount, MAX_PARTICLES, stepParticles, type Burst, type Particle } from "../src/fx/particles";
 import { addTrauma, decayTrauma, shakeOffset } from "../src/fx/shake";
+import { memoryStore } from "../src/save/store";
 import { seeded } from "./random";
 
 const particle = (overrides: Partial<Particle> = {}): Particle => ({
@@ -94,5 +96,25 @@ describe("screen shake", () => {
     // random 1 → the full offset each way: 10 × 0.5² = 2.5
     expect(shakeOffset(0.5, () => 1, shake)).toEqual({ x: 2.5, y: 2.5 });
     expect(shakeOffset(0, () => 1, shake)).toEqual({ x: 0, y: 0 });
+  });
+});
+
+describe("loudness", () => {
+  it("is full volume on top of the listener and half at the hearing range", () => {
+    expect(loudness(0, 100)).toBe(1);
+    expect(loudness(100, 100)).toBe(0.5);
+  });
+
+  it("gets quieter further away", () => {
+    expect(loudness(900, 100)).toBeLessThan(loudness(300, 100));
+  });
+});
+
+describe("Sound", () => {
+  it("remembers being muted", () => {
+    const store = memoryStore();
+    new Sound(store).toggleMute();
+    expect(store.get(MUTE_KEY)).toBe("1");
+    expect(new Sound(store).isMuted).toBe(true);
   });
 });
