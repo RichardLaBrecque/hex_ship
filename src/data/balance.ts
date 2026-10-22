@@ -9,6 +9,17 @@ export const FLIGHT = {
   dockSpeed: 80, // must be slower than this (pixels/s) to dock
 };
 
+export const COMBAT = {
+  missileTurn: 2.5, // radians/s a missile can steer
+  missileLifeFactor: 1.5, // missiles fly this many times their range before burning out
+  beamFlash: 0.08, // seconds a laser beam stays on screen
+  debrisLife: 4, // seconds a broken-off part drifts before fading out
+  debrisSpeed: 40, // pixels/s of random drift added to broken-off parts
+  wreckDelay: 2, // seconds between losing the core and the Game Over screen
+};
+
+export type Combat = typeof COMBAT;
+
 export type Planet = { name: string; x: number; y: number; radius: number; dockRadius: number; color: string };
 
 export const PLANETS: readonly [Planet, Planet] = [

@@ -8,11 +8,16 @@
 
 export type PartId = "bridge" | "engine" | "fuel" | "crew" | "laser" | "cannon" | "missile" | "cargo" | "armor" | "shield";
 
+// beam: hits instantly along a line. shell: flies straight. missile: steers toward its target.
+export type WeaponKind = "beam" | "shell" | "missile";
+
 export type WeaponStats = {
+  kind: WeaponKind;
   damage: number; // per shot
   fireRate: number; // shots per second
   range: number; // pixels
   arc: number; // half-angle of the firing arc, degrees
+  speed: number; // projectile pixels per second; 0 for beams
 };
 
 export type PartDef = {
@@ -112,7 +117,7 @@ export const PARTS: PartCatalog = {
     mass: 3,
     maxHp: 20,
     crewRequired: 1,
-    weapon: { damage: 4, fireRate: 4, range: 350, arc: 45 },
+    weapon: { kind: "beam", damage: 4, fireRate: 4, range: 350, arc: 45, speed: 0 },
   },
   cannon: {
     ...BLANK,
@@ -124,7 +129,7 @@ export const PARTS: PartCatalog = {
     mass: 5,
     maxHp: 25,
     crewRequired: 1,
-    weapon: { damage: 15, fireRate: 1, range: 450, arc: 30 },
+    weapon: { kind: "shell", damage: 15, fireRate: 1, range: 450, arc: 30, speed: 520 },
   },
   missile: {
     ...BLANK,
@@ -136,7 +141,7 @@ export const PARTS: PartCatalog = {
     mass: 4,
     maxHp: 20,
     crewRequired: 1,
-    weapon: { damage: 30, fireRate: 0.4, range: 600, arc: 90 },
+    weapon: { kind: "missile", damage: 30, fireRate: 0.4, range: 600, arc: 90, speed: 300 },
   },
   cargo: {
     ...BLANK,
