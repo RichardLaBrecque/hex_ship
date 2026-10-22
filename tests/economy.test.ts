@@ -1,0 +1,262 @@
+import { describe, expect, it } from "vitest";
+import type { Economy } from "../src/data/balance";
+import { generateOffers, loadContract, unloadContract, type Contract } from "../src/economy/contracts";
+import { fireCrew, hireCrew, hiringFees } from "../src/economy/crew";
+import { arrive, launch, launchCost, launchProblems, towBack, type Outcome, type Run } from "../src/economy/run";
+import { buyPart, repairAll, repairCost, sellPart, sellValue } from "../src/economy/shop";
+import { hex } from "../src/hex/hex";
+import { partAt, placePart, type Ship } from "../src/ship/ship";
+import { TEST_PARTS } from "./catalog";
+
+const TEST_ECONOMY: Economy = {
+  startingMoney: 0,
+  startingCrew: 0,
+  sellRefund: 0.5,
+  repairCostPerHp: 3,
+  crewHireCost: 40,
+  crewWage: 10,
+  fuelPrice: 2,
+  towFee: 100,
+  offersPerStation: 2,
+  contractUnitsMin: 1,
+  contractUnitsMax: 10,
+  payPerUnitMin: 10,
+  payPerUnitMax: 20,
+  payGrowthPerDay: 0.1,
+};
+
+// bridge (2 berths) + rear engine + cargo bay (10 units) + fuel tank (30 units). Needs 2 crew.
+function testShip(): Ship {
+  let ship: Ship = placePart(new Map(), hex(0, 0), "bridge", 0, TEST_PARTS);
+  ship = placePart(ship, hex(-1, 0), "engine", 3, TEST_PARTS);
+  ship = placePart(ship, hex(0, -1), "fuel", 0, TEST_PARTS);
+  return placePart(ship, hex(0, 1), "cargo", 0, TEST_PARTS);
+}
+
+const CONTRACT = (id: string, units: number, payPerUnit = 10): Contract => ({ id, cargo: "ORE", units, payPerUnit });
+
+function testRun(overrides: Partial<Run> = {}): Run {
+  return { money: 1000, day: 1, ship: testShip(), crew: 2, crewSigned: 2, fuel: 30, docked: 0, offers: [], cargo: [], ...overrides };
+}
+
+function ok(outcome: Outcome): Run {
+  if (!outcome.ok) throw new Error(`expected success, got: ${outcome.reason}`);
+  return outcome.run;
+}
+
+function reason(outcome: Outcome): string {
+  if (outcome.ok) throw new Error("expected failure");
+  return outcome.reason;
+}
+
+// Returns each value in turn, forever.
+const sequence = (...values: number[]) => {
+  let i = 0;
+  return () => values[i++ % values.length];
+};
+
+describe("buyPart", () => {
+  it("charges the part's price", () => {
+    const run = ok(buyPart(testRun(), hex(1, 0), "laser", 0, TEST_PARTS, TEST_ECONOMY));
+    expect(run.money).toBe(900);
+    expect(partAt(run.ship, hex(1, 0))?.type).toBe("laser");
+  });
+
+  it("refuses when you can't afford it", () => {
+    expect(reason(buyPart(testRun({ money: 99 }), hex(1, 0), "laser", 0, TEST_PARTS, TEST_ECONOMY))).toBe("LASER costs $100.");
+  });
+
+  it("sells the part it replaces first", () => {
+    // cargo bay (cost 10) refunds 5, laser costs 100
+    const run = ok(buyPart(testRun({ money: 95 }), hex(0, 1), "laser", 0, TEST_PARTS, TEST_ECONOMY));
+    expect(run.money).toBe(0);
+  });
+
+  it("turns a part of the same type for free", () => {
+    const run = ok(buyPart(testRun(), hex(-1, 0), "engine", 2, TEST_PARTS, TEST_ECONOMY));
+    expect(run.money).toBe(1000);
+    expect(partAt(run.ship, hex(-1, 0))?.rotation).toBe(2);
+  });
+
+  it("won't replace the bridge", () => {
+    expect(reason(buyPart(testRun(), hex(0, 0), "armor", 0, TEST_PARTS, TEST_ECONOMY))).toBe("The bridge can't be replaced.");
+  });
+});
+
+describe("sellPart", () => {
+  it("refunds half the price", () => {
+    const run = ok(sellPart(testRun(), hex(-1, 0), TEST_PARTS, TEST_ECONOMY));
+    expect(run.money).toBe(1050);
+    expect(partAt(run.ship, hex(-1, 0))).toBeUndefined();
+  });
+
+  it("won't sell the bridge", () => {
+    expect(reason(sellPart(testRun(), hex(0, 0), TEST_PARTS, TEST_ECONOMY))).toBe("The bridge can't be sold.");
+  });
+});
+
+describe("sellValue", () => {
+  it("drops with damage", () => {
+    // engine: cost 100, max hp 20, at 5 hp → 100 × 0.5 × 0.25
+    expect(sellValue({ hex: hex(0, 0), type: "engine", rotation: 3, hp: 5 }, TEST_PARTS, TEST_ECONOMY)).toBe(12);
+  });
+});
+
+describe("repairs", () => {
+  const damaged = (): Run => {
+    const ship = new Map(testShip());
+    ship.set("0,0", { ...ship.get("0,0")!, hp: 40 }); // bridge missing 10
+    ship.set("-1,0", { ...ship.get("-1,0")!, hp: 15 }); // engine missing 5
+    return testRun({ ship });
+  };
+
+  it("cost the missing hp times the rate", () => {
+    expect(repairCost(damaged().ship, TEST_PARTS, TEST_ECONOMY)).toBe(45);
+  });
+
+  it("restore every part to full and charge for it", () => {
+    const run = ok(repairAll(damaged(), TEST_PARTS, TEST_ECONOMY));
+    expect(run.money).toBe(955);
+    expect(partAt(run.ship, hex(0, 0))?.hp).toBe(50);
+    expect(partAt(run.ship, hex(-1, 0))?.hp).toBe(20);
+  });
+
+  it("refuse when nothing is damaged", () => {
+    expect(reason(repairAll(testRun(), TEST_PARTS, TEST_ECONOMY))).toBe("Nothing needs repairing.");
+  });
+});
+
+describe("crew", () => {
+  it("hiring adds to the roster without charging yet", () => {
+    const ship = placePart(testShip(), hex(1, 0), "crew", 0, TEST_PARTS);
+    const run = ok(hireCrew(testRun({ ship }), TEST_PARTS));
+    expect(run.crew).toBe(3);
+    expect(run.money).toBe(1000);
+  });
+
+  it("hiring works with no money", () => {
+    const ship = placePart(testShip(), hex(1, 0), "crew", 0, TEST_PARTS);
+    expect(ok(hireCrew(testRun({ ship, money: 0 }), TEST_PARTS)).crew).toBe(3);
+  });
+
+  it("hiring needs a free berth", () => {
+    expect(reason(hireCrew(testRun(), TEST_PARTS))).toBe("No free berths. Add a crew module.");
+  });
+
+  it("signing fees cover only crew beyond those already signed", () => {
+    expect(hiringFees(testRun({ crew: 5, crewSigned: 2 }), TEST_ECONOMY)).toBe(120);
+  });
+
+  it("re-hiring someone fired at the same station costs nothing", () => {
+    expect(hiringFees(testRun({ crew: 2, crewSigned: 2 }), TEST_ECONOMY)).toBe(0);
+    expect(hiringFees(testRun({ crew: 1, crewSigned: 2 }), TEST_ECONOMY)).toBe(0);
+  });
+
+  it("firing gives nothing back", () => {
+    const run = ok(fireCrew(testRun()));
+    expect(run.crew).toBe(1);
+    expect(run.money).toBe(1000);
+  });
+});
+
+describe("contracts", () => {
+  it("loading moves a contract from the board into the hold", () => {
+    const run = ok(loadContract(testRun({ offers: [CONTRACT("A", 4), CONTRACT("B", 3)] }), "A", TEST_PARTS));
+    expect(run.cargo.map((c) => c.id)).toEqual(["A"]);
+    expect(run.offers.map((c) => c.id)).toEqual(["B"]);
+  });
+
+  it("loading needs enough free space", () => {
+    const run = testRun({ cargo: [CONTRACT("A", 8)], offers: [CONTRACT("B", 3)] });
+    expect(reason(loadContract(run, "B", TEST_PARTS))).toBe("Needs 3 units of space, only 2 free.");
+  });
+
+  it("unloading puts it back on the board", () => {
+    const run = ok(unloadContract(testRun({ cargo: [CONTRACT("A", 4)] }), "A"));
+    expect(run.cargo).toEqual([]);
+    expect(run.offers.map((c) => c.id)).toEqual(["A"]);
+  });
+
+  it("offers pay more as the days go by", () => {
+    // random 0.5 → units 1 + floor(0.5 × 10) = 6, pay 10 + floor(0.5 × 11) = 15; day 3 → × 1.2 = 18
+    const [offer] = generateOffers(3, sequence(0, 0.5, 0.5), TEST_ECONOMY);
+    expect(offer).toEqual({ id: "3-0", cargo: "Medical supplies", units: 6, payPerUnit: 18 });
+  });
+});
+
+describe("launch", () => {
+  it("costs the crew's wages", () => {
+    expect(launchCost(testRun(), TEST_ECONOMY)).toBe(20);
+  });
+
+  it("takes the wages from your money and leaves fuel alone", () => {
+    const run = ok(launch(testRun(), TEST_PARTS, TEST_ECONOMY));
+    expect(run.money).toBe(980);
+    expect(run.fuel).toBe(30);
+  });
+
+  it("adds signing fees for new crew", () => {
+    // 3 crew × 10 wages + 1 new hire × 40
+    expect(launchCost(testRun({ crew: 3, crewSigned: 2 }), TEST_ECONOMY)).toBe(70);
+  });
+
+  it("charges signing fees once, then everyone aboard is signed", () => {
+    const ship = placePart(testShip(), hex(1, 0), "crew", 0, TEST_PARTS);
+    const run = ok(launch(testRun({ ship, crew: 3, crewSigned: 2 }), TEST_PARTS, TEST_ECONOMY));
+    expect(run.money).toBe(930);
+    expect(run.crewSigned).toBe(3);
+    expect(launchCost(run, TEST_ECONOMY)).toBe(30);
+  });
+
+  it("signs a smaller crew after firing", () => {
+    expect(ok(launch(testRun({ crew: 1, crewSigned: 2 }), TEST_PARTS, TEST_ECONOMY)).crewSigned).toBe(1);
+  });
+
+  it("is blocked when you can't pay", () => {
+    expect(launchProblems(testRun({ money: 19 }), TEST_PARTS, TEST_ECONOMY)).toEqual(["Launching costs $20 but you have $19."]);
+  });
+
+  it("is blocked with an empty tank", () => {
+    expect(launchProblems(testRun({ fuel: 0 }), TEST_PARTS, TEST_ECONOMY)).toEqual(["Fuel tank is empty. Refuel before launching."]);
+  });
+
+  it("is blocked with no crew", () => {
+    expect(launchProblems(testRun({ crew: 0 }), TEST_PARTS, TEST_ECONOMY)).toContain("No crew to fly the ship.");
+  });
+
+  it("is blocked with more crew than berths", () => {
+    expect(launchProblems(testRun({ crew: 3 }), TEST_PARTS, TEST_ECONOMY)).toContain(
+      "1 crew have no berth. Add crew modules or fire crew.",
+    );
+  });
+
+  it("is blocked when cargo no longer fits", () => {
+    const ship = new Map(testShip());
+    ship.delete("0,1"); // sold the only cargo bay
+    expect(launchProblems(testRun({ ship, cargo: [CONTRACT("A", 4)] }), TEST_PARTS, TEST_ECONOMY)).toContain(
+      "Cargo is over capacity (4 / 0). Unload a contract.",
+    );
+  });
+});
+
+describe("towBack", () => {
+  it("charges the tow fee, even into debt", () => {
+    const run = towBack(testRun({ money: 40, fuel: 0 }), TEST_ECONOMY);
+    expect(run.money).toBe(-60);
+    expect(run.fuel).toBe(0);
+  });
+});
+
+describe("arrive", () => {
+  it("pays for delivered cargo, moves a day on and docks at the other planet", () => {
+    const run = testRun({ cargo: [CONTRACT("A", 4, 10), CONTRACT("B", 2, 25)], offers: [CONTRACT("OLD", 1)] });
+    const result = arrive(run, sequence(0), TEST_ECONOMY);
+    expect(result.earned).toBe(90);
+    expect(result.delivered.map((c) => c.id)).toEqual(["A", "B"]);
+    expect(result.run.money).toBe(1090);
+    expect(result.run.day).toBe(2);
+    expect(result.run.docked).toBe(1);
+    expect(result.run.cargo).toEqual([]);
+    expect(result.run.offers.map((c) => c.id)).toEqual(["2-0", "2-1"]);
+  });
+});
