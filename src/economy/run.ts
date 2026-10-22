@@ -17,6 +17,12 @@ export type Run = {
   readonly docked: 0 | 1; // index into PLANETS
   readonly offers: readonly Contract[]; // contracts on the board at this station
   readonly cargo: readonly Contract[]; // contracts loaded aboard, paid on arrival
+  readonly delivered: number; // contracts delivered this run: reputation
+  readonly kills: number; // enemy ships destroyed this run: notoriety
+  // The score, kept as three separate columns.
+  readonly peakShipValue: number; // the most the ship's parts were worth at any launch
+  readonly cargoEarned: number; // total paid for delivered contracts
+  readonly bountiesEarned: number; // total paid for kills
 };
 
 // An action either succeeds with a new Run or explains why it can't happen.
@@ -34,8 +40,13 @@ export function newRun(random: Random = Math.random, econ: Economy = ECONOMY): R
     crewSigned: econ.startingCrew,
     fuel: computeShipStats(ship, econ.startingCrew).fuelCapacity,
     docked: 0,
-    offers: generateOffers(1, random, econ),
+    offers: generateOffers(1, 0, random, econ),
     cargo: [],
+    delivered: 0,
+    kills: 0,
+    peakShipValue: shipValue(ship),
+    cargoEarned: 0,
+    bountiesEarned: 0,
   };
 }
 
@@ -67,10 +78,20 @@ export function launchProblems(run: Run, catalog: PartCatalog = PARTS, econ: Eco
 }
 
 // Pays wages and any new crew's signing fees. Everyone aboard is now signed.
+// The ship's value at launch counts toward the peak ship value score.
 export function launch(run: Run, catalog: PartCatalog = PARTS, econ: Economy = ECONOMY): Outcome {
   const problems = launchProblems(run, catalog, econ);
   if (problems.length > 0) return { ok: false, reason: problems[0] };
-  return { ok: true, run: { ...run, money: run.money - launchCost(run, econ), crewSigned: run.crew } };
+  const value = shipValue(run.ship, catalog);
+  return {
+    ok: true,
+    run: {
+      ...run,
+      money: run.money - launchCost(run, econ),
+      crewSigned: run.crew,
+      peakShipValue: Math.max(run.peakShipValue, value),
+    },
+  };
 }
 
 // A kill pays a share of what the enemy's parts are worth.
@@ -78,14 +99,16 @@ export const bountyFor = (enemy: Ship, catalog: PartCatalog = PARTS, econ: Econo
   Math.round(shipValue(enemy, catalog) * econ.bountyShare);
 
 // What a flight changed, however it ended.
-export type TripResult = { fuel: number; ship: Ship; bounty: number };
+export type TripResult = { fuel: number; ship: Ship; bounty: number; kills: number };
 
-// Fuel burned, damage taken (lost parts are gone) and bounties earned.
+// Fuel burned, damage taken (lost parts are gone), bounties earned and kills made.
 export const afterFlight = (run: Run, trip: TripResult): Run => ({
   ...run,
   fuel: trip.fuel,
   ship: trip.ship,
   money: run.money + trip.bounty,
+  bountiesEarned: run.bountiesEarned + trip.bounty,
+  kills: run.kills + trip.kills,
 });
 
 // Ran dry mid-flight: towed back to the planet you left, for a fee. Money can go negative.
@@ -94,17 +117,21 @@ export const towBack = (run: Run, econ: Economy = ECONOMY): Run => ({ ...run, fu
 export type Arrival = { run: Run; delivered: readonly Contract[]; earned: number };
 
 // Docking at the destination: get paid for cargo, a day passes, a new contract board.
+// Every contract delivered adds to your reputation, which the new board already reflects.
 export function arrive(run: Run, random: Random = Math.random, econ: Economy = ECONOMY): Arrival {
   const earned = expectedPay(run);
   const day = run.day + 1;
+  const delivered = run.delivered + run.cargo.length;
   return {
     run: {
       ...run,
       money: run.money + earned,
+      cargoEarned: run.cargoEarned + earned,
       day,
       docked: destination(run),
       cargo: [],
-      offers: generateOffers(day, random, econ),
+      delivered,
+      offers: generateOffers(day, delivered, random, econ),
     },
     delivered: run.cargo,
     earned,

@@ -78,7 +78,7 @@ export class FlightScene implements Scene {
   }
 
   private trip(): TripResult {
-    return { fuel: this.fuel, ship: this.player.ship, bounty: this.bounty };
+    return { fuel: this.fuel, ship: this.player.ship, bounty: this.bounty, kills: this.kills };
   }
 
   update(dt: number, input: Input): void {

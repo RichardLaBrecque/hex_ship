@@ -18,11 +18,9 @@ const TEST_ECONOMY: Economy = {
   fuelPrice: 3,
   towFee: 100,
   offersPerStation: 1,
-  contractUnitsMin: 1,
-  contractUnitsMax: 1,
-  payPerUnitMin: 1,
-  payPerUnitMax: 1,
-  payGrowthPerDay: 0,
+  payBonusPerDelivery: 0,
+  topTierShare: 1,
+  contractTiers: [{ rank: "ONLY", unlockAt: 0, units: { min: 1, max: 1 }, pay: { min: 1, max: 1 } }],
   bountyShare: 0,
 };
 
@@ -37,7 +35,7 @@ function testShip(): Ship {
 }
 
 function testRun(overrides: Partial<Run> = {}): Run {
-  return { money: 1000, day: 1, ship: testShip(), crew: 2, crewSigned: 2, fuel: 50, docked: 0, offers: [], cargo: [], ...overrides };
+  return { money: 1000, day: 1, ship: testShip(), crew: 2, crewSigned: 2, fuel: 50, docked: 0, offers: [], cargo: [], delivered: 0, kills: 0, peakShipValue: 0, cargoEarned: 0, bountiesEarned: 0, ...overrides };
 }
 
 function ok(outcome: Outcome): Run {

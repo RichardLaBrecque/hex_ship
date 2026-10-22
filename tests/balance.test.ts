@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PLANETS } from "../src/data/balance";
+import { ECONOMY, PLANETS } from "../src/data/balance";
 import { ENEMY_TIERS } from "../src/data/enemies";
 import { BUILDABLE, PARTS } from "../src/data/parts";
 import { repairCost, sellValue } from "../src/economy/shop";
@@ -39,6 +39,24 @@ describe("balance", () => {
         expect(repairCost(new Map([["0,0", part]])), `${type} at ${hp} hp`).toBeLessThan(replace);
       }
     }
+  });
+
+  describe("contract tiers", () => {
+    const tiers = ECONOMY.contractTiers;
+
+    it("pay more per unit than the tier below", () => {
+      for (let i = 1; i < tiers.length; i++) expect(tiers[i].pay.min).toBeGreaterThan(tiers[i - 1].pay.min);
+    });
+
+    it("need more units at their smallest than the tier below", () => {
+      for (let i = 1; i < tiers.length; i++) expect(tiers[i].units.min).toBeGreaterThan(tiers[i - 1].units.min);
+    });
+
+    it("above tier 1 need a bigger hold than the starter ship has", () => {
+      const hold = computeShipStats(starterShip(), Infinity).cargoCapacity;
+      expect(tiers[0].units.max).toBeLessThanOrEqual(hold);
+      for (const tier of tiers.slice(1)) expect(tier.units.min).toBeGreaterThan(hold);
+    });
   });
 
   describe("tier-1 enemies", () => {

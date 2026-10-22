@@ -37,11 +37,16 @@ export const ECONOMY = {
   fuelPrice: 2, // per fuel unit when refuelling at a station
   towFee: 150, // charged for a tow back when you run dry mid-flight
   offersPerStation: 4,
-  contractUnitsMin: 3,
-  contractUnitsMax: 18,
-  payPerUnitMin: 10,
-  payPerUnitMax: 20,
-  payGrowthPerDay: 0.03, // contract prices rise 3% a day
+  payBonusPerDelivery: 0.03, // reputation: every contract delivered adds 3% to contract pay
+  topTierShare: 0.5, // chance an offer comes from your best unlocked contract tier rather than any unlocked tier
+  // Delivering contracts earns reputation ranks, and each rank unlocks a contract tier.
+  // Higher tiers pay more per unit but need bigger holds (tests/balance.test.ts).
+  contractTiers: [
+    { rank: "Unknown", unlockAt: 0, units: { min: 3, max: 10 }, pay: { min: 10, max: 20 } },
+    { rank: "Known", unlockAt: 5, units: { min: 12, max: 25 }, pay: { min: 18, max: 30 } },
+    { rank: "Trusted", unlockAt: 15, units: { min: 25, max: 45 }, pay: { min: 28, max: 45 } },
+    { rank: "Renowned", unlockAt: 30, units: { min: 40, max: 70 }, pay: { min: 40, max: 65 } },
+  ],
   bountyShare: 0.75, // a kill pays this share of the enemy ship's part value
 };
 

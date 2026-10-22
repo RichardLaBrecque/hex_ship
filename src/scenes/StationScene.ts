@@ -1,6 +1,6 @@
 import { ECONOMY, PLANETS } from "../data/balance";
 import { BUILDABLE, PARTS, type PartId } from "../data/parts";
-import { cargoUnits, contractPay, loadContract, unloadContract, type Contract } from "../economy/contracts";
+import { cargoUnits, contractPay, loadContract, reputation, unloadContract, type Contract } from "../economy/contracts";
 import { fireCrew, hireCrew, hiringFees, wages } from "../economy/crew";
 import { refuel, refuelCost } from "../economy/fuel";
 import { destination, expectedPay, launchCost, launchProblems, tripDistance, type Outcome, type Run } from "../economy/run";
@@ -535,6 +535,13 @@ export class StationScene implements Scene {
       bold: true,
       color: THEME.muted,
     });
+    const rep = reputation(this.run.delivered);
+    const next = rep.next ? `  ·  ${rep.next.rank} at ${rep.next.at} delivered` : "";
+    drawText(ctx, `${rep.rank} (${this.run.delivered} delivered, +${Math.round(rep.payBonus * 100)}% pay)${next}`, area.x + area.w / 2, area.y, {
+      align: "center",
+      color: THEME.accent,
+      size: 12,
+    });
     drawText(ctx, `Hold ${loaded} / ${capacity} units`, area.x + area.w, area.y, {
       align: "right",
       bold: true,
@@ -568,6 +575,7 @@ export class StationScene implements Scene {
       const x = rect.x + 12;
       const faded = fits ? THEME.text : THEME.muted;
       drawText(ctx, contract.cargo, x, rect.y + 20, { bold: true, color: faded });
+      drawText(ctx, `T${contract.tier + 1}`, rect.x + rect.w - 12, rect.y + 20, { align: "right", bold: true, size: 12, color: THEME.accent });
       drawText(ctx, `${contract.units} units × $${contract.payPerUnit}`, x, rect.y + 44, { color: THEME.muted, size: 12 });
       drawText(ctx, `$${contractPay(contract)}`, x, rect.y + 72, { size: 20, bold: true, color: fits ? THEME.good : THEME.muted });
       const footer = isLoaded ? "LOADED · click to unload" : fits ? "Click to load" : "Not enough hold space";
@@ -600,8 +608,7 @@ function partDetails(id: PartId): string[] {
   if (def.weapon) {
     const w = def.weapon;
     lines.push(`Damage ${w.damage} × ${w.fireRate}/s`);
-    lines.push(`Range ${w.range} · Arc ±${w.arc}°`);
-  }
+    lines.push(`Range ${w.range} · Arc ±${w.arc}°`);  }
   return lines;
 }
 

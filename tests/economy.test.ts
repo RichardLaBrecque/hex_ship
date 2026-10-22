@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Economy } from "../src/data/balance";
-import { generateOffers, loadContract, unloadContract, type Contract } from "../src/economy/contracts";
+import { generateOffers, loadContract, reputation, unloadContract, type Contract } from "../src/economy/contracts";
 import { fireCrew, hireCrew, hiringFees } from "../src/economy/crew";
 import { afterFlight, arrive, bountyFor, launch, launchCost, launchProblems, towBack, type Outcome, type Run } from "../src/economy/run";
 import { buyPart, repairAll, repairCost, sellPart, sellValue } from "../src/economy/shop";
@@ -18,11 +18,12 @@ const TEST_ECONOMY: Economy = {
   fuelPrice: 2,
   towFee: 100,
   offersPerStation: 2,
-  contractUnitsMin: 1,
-  contractUnitsMax: 10,
-  payPerUnitMin: 10,
-  payPerUnitMax: 20,
-  payGrowthPerDay: 0.1,
+  payBonusPerDelivery: 0.1,
+  topTierShare: 0.5,
+  contractTiers: [
+    { rank: "LOW", unlockAt: 0, units: { min: 1, max: 10 }, pay: { min: 10, max: 20 } },
+    { rank: "HIGH", unlockAt: 3, units: { min: 20, max: 30 }, pay: { min: 50, max: 60 } },
+  ],
   bountyShare: 0.5,
 };
 
@@ -34,10 +35,26 @@ function testShip(): Ship {
   return placePart(ship, hex(0, 1), "cargo", 0, TEST_PARTS);
 }
 
-const CONTRACT = (id: string, units: number, payPerUnit = 10): Contract => ({ id, cargo: "ORE", units, payPerUnit });
+const CONTRACT = (id: string, units: number, payPerUnit = 10): Contract => ({ id, cargo: "ORE", units, payPerUnit, tier: 0 });
 
 function testRun(overrides: Partial<Run> = {}): Run {
-  return { money: 1000, day: 1, ship: testShip(), crew: 2, crewSigned: 2, fuel: 30, docked: 0, offers: [], cargo: [], ...overrides };
+  return {
+    money: 1000,
+    day: 1,
+    ship: testShip(),
+    crew: 2,
+    crewSigned: 2,
+    fuel: 30,
+    docked: 0,
+    offers: [],
+    cargo: [],
+    delivered: 0,
+    kills: 0,
+    peakShipValue: 0,
+    cargoEarned: 0,
+    bountiesEarned: 0,
+    ...overrides,
+  };
 }
 
 function ok(outcome: Outcome): Run {
@@ -149,12 +166,14 @@ describe("bountyFor", () => {
 });
 
 describe("afterFlight", () => {
-  it("keeps the fuel left and the damage taken, and pays the bounties", () => {
+  it("keeps the fuel left and the damage taken, pays the bounties and counts the kills", () => {
     const ship = placePart(new Map(), hex(0, 0), "bridge", 0, TEST_PARTS);
-    const run = afterFlight(testRun(), { fuel: 9, ship, bounty: 99 });
+    const run = afterFlight(testRun({ kills: 9, bountiesEarned: 9 }), { fuel: 9, ship, bounty: 99, kills: 2 });
     expect(run.fuel).toBe(9);
     expect(run.ship).toBe(ship);
     expect(run.money).toBe(1099);
+    expect(run.bountiesEarned).toBe(108);
+    expect(run.kills).toBe(11);
   });
 });
 
@@ -209,10 +228,44 @@ describe("contracts", () => {
     expect(run.offers.map((c) => c.id)).toEqual(["A"]);
   });
 
-  it("offers pay more as the days go by", () => {
-    // random 0.5 → units 1 + floor(0.5 × 10) = 6, pay 10 + floor(0.5 × 11) = 15; day 3 → × 1.2 = 18
-    const [offer] = generateOffers(3, sequence(0, 0.5, 0.5), TEST_ECONOMY);
-    expect(offer).toEqual({ id: "3-0", cargo: "Medical supplies", units: 6, payPerUnit: 18 });
+});
+
+describe("generateOffers", () => {
+  it("offers only the first tier to a newcomer", () => {
+    // tier roll 0 → top unlocked tier; cargo 0; units 1 + floor(0.5 × 10) = 6; pay 10 + floor(0.5 × 11) = 15
+    const [offer] = generateOffers(3, 0, sequence(0, 0, 0.5, 0.5), TEST_ECONOMY);
+    expect(offer).toEqual({ id: "3-0", cargo: "Medical supplies", units: 6, payPerUnit: 15, tier: 0 });
+  });
+
+  it("raises pay by the reputation bonus for every contract delivered", () => {
+    // 2 delivered × 10% = +20%: 15 → 18
+    const [offer] = generateOffers(3, 2, sequence(0, 0, 0.5, 0.5), TEST_ECONOMY);
+    expect(offer.payPerUnit).toBe(18);
+  });
+
+  it("offers the best unlocked tier when the tier roll is under topTierShare", () => {
+    // 3 delivered unlocks HIGH; units 20 + floor(0 × 11) = 20; pay 50 × 1.3 = 65
+    const [offer] = generateOffers(3, 3, sequence(0.4, 0, 0, 0), TEST_ECONOMY);
+    expect(offer).toMatchObject({ units: 20, payPerUnit: 65, tier: 1 });
+  });
+
+  it("can still offer a lower tier once higher ones are unlocked", () => {
+    // tier roll 0.6 misses the top-tier chance; then 0.4 × 2 unlocked tiers → tier 0
+    const [offer] = generateOffers(3, 3, sequence(0.6, 0.4, 0, 0, 0), TEST_ECONOMY);
+    expect(offer.tier).toBe(0);
+  });
+});
+
+describe("reputation", () => {
+  it("starts at the first rank with the next one to earn", () => {
+    expect(reputation(0, TEST_ECONOMY)).toEqual({ rank: "LOW", payBonus: 0, next: { rank: "HIGH", at: 3 } });
+  });
+
+  it("reaches the top rank with nothing left to earn", () => {
+    const rep = reputation(4, TEST_ECONOMY);
+    expect(rep.rank).toBe("HIGH");
+    expect(rep.payBonus).toBeCloseTo(0.4);
+    expect(rep.next).toBeNull();
   });
 });
 
@@ -225,6 +278,15 @@ describe("launch", () => {
     const run = ok(launch(testRun(), TEST_PARTS, TEST_ECONOMY));
     expect(run.money).toBe(980);
     expect(run.fuel).toBe(30);
+  });
+
+  it("records a new peak ship value", () => {
+    // engine $100 + fuel $20 + cargo $10
+    expect(ok(launch(testRun({ peakShipValue: 99 }), TEST_PARTS, TEST_ECONOMY)).peakShipValue).toBe(130);
+  });
+
+  it("keeps an earlier, higher peak ship value", () => {
+    expect(ok(launch(testRun({ peakShipValue: 999 }), TEST_PARTS, TEST_ECONOMY)).peakShipValue).toBe(999);
   });
 
   it("adds signing fees for new crew", () => {
@@ -290,5 +352,15 @@ describe("arrive", () => {
     expect(result.run.docked).toBe(1);
     expect(result.run.cargo).toEqual([]);
     expect(result.run.offers.map((c) => c.id)).toEqual(["2-0", "2-1"]);
+  });
+
+  it("adds every delivered contract to your reputation", () => {
+    const run = testRun({ delivered: 4, cargo: [CONTRACT("A", 1), CONTRACT("B", 1)] });
+    expect(arrive(run, sequence(0), TEST_ECONOMY).run.delivered).toBe(6);
+  });
+
+  it("adds the pay to the cargo sold score", () => {
+    const run = testRun({ cargoEarned: 9, cargo: [CONTRACT("A", 4, 10)] });
+    expect(arrive(run, sequence(0), TEST_ECONOMY).run.cargoEarned).toBe(49);
   });
 });
