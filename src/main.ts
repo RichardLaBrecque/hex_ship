@@ -1,8 +1,9 @@
-import { arrive, launch, newRun, towBack, type Run } from "./economy/run";
+import { afterFlight, arrive, launch, newRun, towBack, type Run } from "./economy/run";
 import { Input } from "./engine/input";
 import { startLoop } from "./engine/loop";
 import { SceneManager } from "./engine/scene";
 import { FlightScene } from "./scenes/FlightScene";
+import { GameOverScene } from "./scenes/GameOverScene";
 import { StationScene } from "./scenes/StationScene";
 
 const canvas = document.getElementById("game") as HTMLCanvasElement;
@@ -37,17 +38,21 @@ function startTrip(docked: Run): void {
   scenes.switchTo(
     new FlightScene({
       run: flying,
-      onArrive: (fuel) => {
-        const { run, delivered, earned } = arrive({ ...flying, fuel });
-        openStation(run, delivered.length > 0 ? `Delivered ${delivered.length} contract(s): +$${earned}` : "Arrived with an empty hold.");
+      onArrive: (trip) => {
+        const { run, delivered, earned } = arrive(afterFlight(flying, trip));
+        const report = delivered.length > 0 ? `Delivered ${delivered.length} contract(s): +$${earned}` : "Arrived with an empty hold.";
+        openStation(run, withBounty(report, trip.bounty));
       },
-      onAbort: (fuel) =>
-        fuel > 0
-          ? openStation({ ...flying, fuel }, "Turned back. Wages aren't refunded.")
-          : openStation(towBack(flying), "Towed back on an empty tank."),
+      onAbort: (trip) =>
+        trip.fuel > 0
+          ? openStation(afterFlight(flying, trip), withBounty("Turned back. Wages aren't refunded.", trip.bounty))
+          : openStation(towBack(afterFlight(flying, trip)), withBounty("Towed back on an empty tank.", trip.bounty)),
+      onDestroyed: () => scenes.switchTo(new GameOverScene({ run: flying, onRestart: () => openStation(newRun()) })),
     }),
   );
 }
+
+const withBounty = (report: string, bounty: number): string => (bounty > 0 ? `${report} Bounties: +$${bounty}` : report);
 
 openStation(newRun());
 

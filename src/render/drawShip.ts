@@ -13,6 +13,7 @@ export type ShipDrawOptions = {
   flames?: number; // 0..1 engine flame strength
   alpha?: number;
   flagged?: ReadonlySet<string>; // hexKeys drawn with a red warning outline
+  outline?: string; // hex border colour for every part, e.g. to mark enemies
   catalog?: PartCatalog;
 };
 
@@ -24,7 +25,7 @@ export function drawShip(ctx: CanvasRenderingContext2D, ship: Ship, options: Shi
   ctx.globalAlpha = options.alpha ?? 1;
   if (options.flames) drawEngineFlames(ctx, ship, options.size, options.flames);
   for (const [key, part] of ship) {
-    drawPart(ctx, part, options.size, options.flagged?.has(key) ?? false, options.catalog ?? PARTS);
+    drawPart(ctx, part, options.size, options.flagged?.has(key) ?? false, options.catalog ?? PARTS, options.outline);
   }
   ctx.restore();
 }
@@ -65,13 +66,14 @@ export function drawPart(
   size: number,
   flagged: boolean,
   catalog: PartCatalog = PARTS,
+  outline?: string,
 ): void {
   const def = catalog[part.type];
   const p = hexToPixel(part.hex, size);
   const health = part.hp / def.maxHp;
   drawHex(ctx, p, size - 1, {
     fill: flagged ? "#5a1d24" : `${def.color}${health < 1 ? "22" : "40"}`,
-    stroke: flagged ? THEME.bad : def.color,
+    stroke: flagged ? THEME.bad : (outline ?? def.color),
     lineWidth: flagged ? 3 : 1.5,
   });
   ctx.save();

@@ -1,6 +1,6 @@
 import { ECONOMY, PLANETS, type Economy } from "../data/balance";
 import { PARTS, type PartCatalog } from "../data/parts";
-import { starterShip, type Ship } from "../ship/ship";
+import { shipValue, starterShip, type Ship } from "../ship/ship";
 import { computeShipStats } from "../ship/stats";
 import { validateShip } from "../ship/validate";
 import { cargoUnits, contractPay, generateOffers, type Contract } from "./contracts";
@@ -72,6 +72,21 @@ export function launch(run: Run, catalog: PartCatalog = PARTS, econ: Economy = E
   if (problems.length > 0) return { ok: false, reason: problems[0] };
   return { ok: true, run: { ...run, money: run.money - launchCost(run, econ), crewSigned: run.crew } };
 }
+
+// A kill pays a share of what the enemy's parts are worth.
+export const bountyFor = (enemy: Ship, catalog: PartCatalog = PARTS, econ: Economy = ECONOMY): number =>
+  Math.round(shipValue(enemy, catalog) * econ.bountyShare);
+
+// What a flight changed, however it ended.
+export type TripResult = { fuel: number; ship: Ship; bounty: number };
+
+// Fuel burned, damage taken (lost parts are gone) and bounties earned.
+export const afterFlight = (run: Run, trip: TripResult): Run => ({
+  ...run,
+  fuel: trip.fuel,
+  ship: trip.ship,
+  money: run.money + trip.bounty,
+});
 
 // Ran dry mid-flight: towed back to the planet you left, for a fee. Money can go negative.
 export const towBack = (run: Run, econ: Economy = ECONOMY): Run => ({ ...run, fuel: 0, money: run.money - econ.towFee });

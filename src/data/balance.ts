@@ -42,6 +42,7 @@ export const ECONOMY = {
   payPerUnitMin: 10,
   payPerUnitMax: 20,
   payGrowthPerDay: 0.03, // contract prices rise 3% a day
+  bountyShare: 0.75, // a kill pays this share of the enemy ship's part value
 };
 
 export type Economy = typeof ECONOMY;

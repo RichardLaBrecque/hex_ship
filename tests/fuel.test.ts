@@ -23,6 +23,7 @@ const TEST_ECONOMY: Economy = {
   payPerUnitMin: 1,
   payPerUnitMax: 1,
   payGrowthPerDay: 0,
+  bountyShare: 0,
 };
 
 const TUNING = { hexSize: 10, thrustScale: 10, reverseFactor: 0.5, turnScale: 1, drag: 0.5, dockSpeed: 50 };

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Economy } from "../src/data/balance";
 import { generateOffers, loadContract, unloadContract, type Contract } from "../src/economy/contracts";
 import { fireCrew, hireCrew, hiringFees } from "../src/economy/crew";
-import { arrive, launch, launchCost, launchProblems, towBack, type Outcome, type Run } from "../src/economy/run";
+import { afterFlight, arrive, bountyFor, launch, launchCost, launchProblems, towBack, type Outcome, type Run } from "../src/economy/run";
 import { buyPart, repairAll, repairCost, sellPart, sellValue } from "../src/economy/shop";
 import { hex } from "../src/hex/hex";
 import { partAt, placePart, type Ship } from "../src/ship/ship";
@@ -23,6 +23,7 @@ const TEST_ECONOMY: Economy = {
   payPerUnitMin: 10,
   payPerUnitMax: 20,
   payGrowthPerDay: 0.1,
+  bountyShare: 0.5,
 };
 
 // bridge (2 berths) + rear engine + cargo bay (10 units) + fuel tank (30 units). Needs 2 crew.
@@ -137,6 +138,23 @@ describe("repairs", () => {
 
   it("refuse when nothing is damaged", () => {
     expect(reason(repairAll(testRun(), TEST_PARTS, TEST_ECONOMY))).toBe("Nothing needs repairing.");
+  });
+});
+
+describe("bountyFor", () => {
+  it("pays the bounty share of the enemy's part value", () => {
+    // engine $100 + fuel $20 + cargo $10 = $130, half of it
+    expect(bountyFor(testShip(), TEST_PARTS, TEST_ECONOMY)).toBe(65);
+  });
+});
+
+describe("afterFlight", () => {
+  it("keeps the fuel left and the damage taken, and pays the bounties", () => {
+    const ship = placePart(new Map(), hex(0, 0), "bridge", 0, TEST_PARTS);
+    const run = afterFlight(testRun(), { fuel: 9, ship, bounty: 99 });
+    expect(run.fuel).toBe(9);
+    expect(run.ship).toBe(ship);
+    expect(run.money).toBe(1099);
   });
 });
 
