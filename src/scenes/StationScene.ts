@@ -1,4 +1,4 @@
-import { ECONOMY, PLANETS } from "../data/balance";
+import { ECONOMY, FLIGHT, PLANETS } from "../data/balance";
 import { BUILDABLE, PARTS, type PartId } from "../data/parts";
 import { cargoUnits, contractPay, loadContract, reputation, unloadContract, type Contract } from "../economy/contracts";
 import { fireCrew, hireCrew, hiringFees, wages } from "../economy/crew";
@@ -16,6 +16,7 @@ import { partAt, rotatePart, shipValue, type PlacedPart } from "../ship/ship";
 import { computeShipStats, type ShipStats } from "../ship/stats";
 import { validateShip, type Validation } from "../ship/validate";
 import { tripFuelEstimate } from "../sim/fuel";
+import { thrustSpin } from "../sim/physics";
 
 const MAX_HEX_SIZE = 28;
 const GRID_RADIUS = 5;
@@ -415,17 +416,22 @@ export class StationScene implements Scene {
     let y = panel.y + 22;
     drawText(ctx, "SHIP", left, y, { bold: true, color: THEME.muted });
     y += 24;
-    const rows: [string, string][] = [
+    const thrustDrift = thrustSpin(s, s.main);
+    const brakeDrift = thrustSpin(s, s.brake);
+    const maxTurn = s.turnRate * FLIGHT.turnScale;
+    const rows: [string, string, string?][] = [
       ["Value", `$${shipValue(this.run.ship)}`],
       ["Mass", fmt(s.mass)],
       ["Acceleration", fmt(s.acceleration, 2)],
       ["Turn rate", fmt(s.turnRate, 2)],
+      ["Thrust drift", driftText(thrustDrift), driftColor(thrustDrift, maxTurn)],
+      ["Brake drift", driftText(brakeDrift), driftColor(brakeDrift, maxTurn)],
       ["Shield", s.shieldMax > 0 ? `${fmt(s.shieldMax)} (+${fmt(s.shieldRegen, 1)}/s)` : "none"],
       ["Firepower", `${fmt(s.dps, 1)} dps`],
       ["Cargo hold", `${s.cargoCapacity} units`],
     ];
-    for (const [label, value] of rows) {
-      row(label, value, y);
+    for (const [label, value, color] of rows) {
+      row(label, value, y, color);
       y += 20;
     }
 
@@ -622,6 +628,18 @@ function partDetails(id: PartId): string[] {
 }
 
 const fmt = (n: number, digits = 0): string => n.toFixed(digits);
+
+// How off-centre engines turn the ship under full thrust or braking, if nobody steers (see thrustSpin).
+const STRAIGHT = (1 * Math.PI) / 180; // a drift under 1°/s isn't worth mentioning
+
+function driftText(spin: number): string {
+  if (Math.abs(spin) < STRAIGHT) return "straight";
+  return `turns ${spin > 0 ? "right" : "left"} ${fmt((Math.abs(spin) * 180) / Math.PI)}°/s`;
+}
+
+// Amber while easy to steer against; red once it drifts at half the ship's turn rate or more.
+const driftColor = (spin: number, maxTurn: number): string =>
+  Math.abs(spin) < STRAIGHT ? THEME.text : Math.abs(spin) < maxTurn / 2 ? THEME.warn : THEME.bad;
 
 // e.g. "Danger 2 (next at $1200 ship value or 13 more kills)"
 function dangerText(outlook: DangerOutlook): string {
