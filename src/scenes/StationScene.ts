@@ -438,18 +438,27 @@ export class StationScene implements Scene {
 
   private renderSidePanel(ctx: CanvasRenderingContext2D, width: number, height: number): void {
     const panel = { x: width - SIDE_WIDTH - 16, y: 16, w: SIDE_WIDTH, h: height - 32 };
-    const left = panel.x + 14;
-    const right = panel.x + panel.w - 14;
+    const column = { left: panel.x + 14, right: panel.x + panel.w - 14 };
     drawPanel(ctx, panel);
 
-    const row = (label: string, value: string, y: number, color: string = THEME.text) => {
-      drawText(ctx, label, left, y, { color: THEME.muted });
-      drawText(ctx, value, right, y, { align: "right", color });
-    };
+    this.launchButton = { x: column.left, y: panel.y + panel.h - 58, w: column.right - column.left, h: 44 };
+    const shipBottom = this.renderShipSection(ctx, column, panel.y + 22);
+    const suppliesBottom = this.renderSuppliesSection(ctx, column, shipBottom + 14);
+    this.renderTripSection(ctx, column, suppliesBottom + 16, this.launchButton.y - 12);
+    this.renderLaunchButton(ctx);
+  }
 
-    // Ship
+  // A label on the left of the column and its value on the right.
+  private statRow(ctx: CanvasRenderingContext2D, column: Column, label: string, value: string, y: number, color: string = THEME.text): void {
+    drawText(ctx, label, column.left, y, { color: THEME.muted });
+    drawText(ctx, value, column.right, y, { align: "right", color });
+  }
+
+  // Ship stats, hull and the repair button, starting at `y`. Returns the y below it.
+  private renderShipSection(ctx: CanvasRenderingContext2D, column: Column, top: number): number {
+    const { left, right } = column;
     const s = this.stats;
-    let y = panel.y + 22;
+    let y = top;
     drawText(ctx, "SHIP", left, y, { bold: true, color: THEME.muted });
     y += 24;
     const thrustDrift = thrustSpin(s, s.main);
@@ -467,13 +476,13 @@ export class StationScene implements Scene {
       ["Cargo hold", `${s.cargoCapacity} units`],
     ];
     for (const [label, value, color] of rows) {
-      row(label, value, y, color);
+      this.statRow(ctx, column, label, value, y, color);
       y += 20;
     }
 
     // Hull and repairs
     const repair = repairCost(this.run.ship);
-    row("Hull", `${fmt(s.hull)} / ${fmt(s.maxHull)}`, y, repair > 0 ? THEME.warn : THEME.text);
+    this.statRow(ctx, column, "Hull", `${fmt(s.hull)} / ${fmt(s.maxHull)}`, y, repair > 0 ? THEME.warn : THEME.text);
     y += 14;
     this.repairButton = repair > 0 ? { x: left, y, w: right - left, h: 26 } : NO_RECT;
     if (repair > 0) {
@@ -482,18 +491,25 @@ export class StationScene implements Scene {
     } else {
       y += 6;
     }
+    return y;
+  }
+
+  // Fuel, the refuel button and crew, starting at `top`. Returns the y below it.
+  private renderSuppliesSection(ctx: CanvasRenderingContext2D, column: Column, top: number): number {
+    const { left, right } = column;
+    const s = this.stats;
+    let y = top;
 
     // Fuel
-    y += 14;
     drawText(ctx, "FUEL", left, y, { bold: true, color: THEME.muted });
     y += 24;
     const lowFuel = this.run.fuel < this.tripFuel;
-    row("Tanks", `${Math.floor(this.run.fuel)} / ${s.fuelCapacity} units`, y, lowFuel ? THEME.warn : THEME.text);
+    this.statRow(ctx, column, "Tanks", `${Math.floor(this.run.fuel)} / ${s.fuelCapacity} units`, y, lowFuel ? THEME.warn : THEME.text);
     y += 20;
-    row("Burn at full thrust", `${fmt(s.fuelBurn, 1)} / s`, y);
+    this.statRow(ctx, column, "Burn at full thrust", `${fmt(s.fuelBurn, 1)} / s`, y);
     y += 20;
     const estimate = Number.isFinite(this.tripFuel) ? `~${this.tripFuel} units` : "—";
-    row("Trip needs (est.)", estimate, y, lowFuel ? THEME.warn : THEME.text);
+    this.statRow(ctx, column, "Trip needs (est.)", estimate, y, lowFuel ? THEME.warn : THEME.text);
     y += 14;
     const refuelPrice = refuelCost(this.run);
     this.refuelButton = refuelPrice > 0 ? { x: left, y, w: right - left, h: 26 } : NO_RECT;
@@ -524,42 +540,49 @@ export class StationScene implements Scene {
       drawText(ctx, `Under-crewed: systems at ${Math.round(s.efficiency * 100)}%`, left, y, { color: THEME.warn, size: 12 });
       y += 18;
     }
+    return y;
+  }
 
-    // Launch
-    y += 16;
+  // The trip's costs and what stops a launch, starting at `top` and stopping before `bottom`. Returns the y below it.
+  private renderTripSection(ctx: CanvasRenderingContext2D, column: Column, top: number, bottom: number): number {
+    const { left, right } = column;
+    let y = top;
     drawText(ctx, `TRIP TO ${PLANETS[destination(this.run)].name.toUpperCase()}`, left, y, { bold: true, color: THEME.muted });
     y += 24;
     const pay = expectedPay(this.run);
     const fuelCost = Number.isFinite(this.tripFuel) ? Math.ceil(this.tripFuel * ECONOMY.fuelPrice) : 0;
-    row("Crew wages", `−$${wages(this.run.crew)}`, y);
+    this.statRow(ctx, column, "Crew wages", `−$${wages(this.run.crew)}`, y);
     y += 20;
     const fees = hiringFees(this.run);
     if (fees > 0) {
-      row(`Hiring ${this.run.crew - this.run.crewSigned} new crew`, `−$${fees}`, y);
+      this.statRow(ctx, column, `Hiring ${this.run.crew - this.run.crewSigned} new crew`, `−$${fees}`, y);
       y += 20;
     }
-    row("Fuel used (est.)", `−$${fuelCost}`, y);
+    this.statRow(ctx, column, "Fuel used (est.)", `−$${fuelCost}`, y);
     y += 20;
-    row("Cargo pay", `+$${pay}`, y, THEME.good);
+    this.statRow(ctx, column, "Cargo pay", `+$${pay}`, y, THEME.good);
     y += 20;
     const profit = pay - this.launchCost - fuelCost;
-    row("Trip profit", `${profit >= 0 ? "+" : "−"}$${Math.abs(profit)}`, y, profit >= 0 ? THEME.good : THEME.bad);
+    this.statRow(ctx, column, "Trip profit", `${profit >= 0 ? "+" : "−"}$${Math.abs(profit)}`, y, profit >= 0 ? THEME.good : THEME.bad);
     y += 24;
 
-    this.launchButton = { x: left, y: panel.y + panel.h - 58, w: right - left, h: 44 };
     if (this.problems.length === 0) {
       drawText(ctx, "✓ Ready to launch", left, y, { color: THEME.good, bold: true });
+      y += 18;
     } else {
       for (const problem of this.problems) {
         for (const lineText of wrapText(ctx, `• ${problem}`, right - left, 12)) {
-          if (y > this.launchButton.y - 12) break;
+          if (y > bottom) break;
           drawText(ctx, lineText, left, y, { color: THEME.bad, size: 12 });
           y += 16;
         }
         y += 2;
       }
     }
+    return y;
+  }
 
+  private renderLaunchButton(ctx: CanvasRenderingContext2D): void {
     drawButton(ctx, this.launchButton, `LAUNCH  (−$${this.launchCost})`, {
       enabled: this.problems.length === 0,
       hovered: pointInRect(this.mouse, this.launchButton),
@@ -657,6 +680,9 @@ export class StationScene implements Scene {
     return { x: this.gridCenter.x + p.x, y: this.gridCenter.y + p.y };
   }
 }
+
+// The left and right edges of a panel's text.
+type Column = { left: number; right: number };
 
 // Engines and weapons care which way they face; nothing else does.
 const usesRotation = (type: PartId): boolean => type === "engine" || PARTS[type].weapon !== null;
