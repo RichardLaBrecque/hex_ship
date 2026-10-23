@@ -25,6 +25,8 @@ const SIDE_WIDTH = 280;
 const ROW_HEIGHT = 44;
 const TOP_BAR = 64;
 const BOARD_HEIGHT = 128;
+const ACTION_BAR = 36; // under the grid: rotate, sell and done buttons for players without a keyboard
+const ACTION_WIDTH = 84;
 const MESSAGE_SECONDS = 2.5;
 const REPORT_SECONDS = 6;
 
@@ -69,6 +71,7 @@ export class StationScene implements Scene {
   private message = "";
   private messageColor: string = THEME.warn;
   private messageTimer = 0;
+  private touch = false; // the player is on a touch screen, so help text talks about tapping
 
   // Layout, recalculated every render from the canvas size.
   private hexSize = MAX_HEX_SIZE;
@@ -80,6 +83,10 @@ export class StationScene implements Scene {
   private repairButton = NO_RECT;
   private refuelButton = NO_RECT;
   private launchButton = NO_RECT;
+  private rotateLeftButton = NO_RECT;
+  private rotateRightButton = NO_RECT;
+  private sellButton = NO_RECT;
+  private doneButton = NO_RECT;
 
   constructor(private options: StationOptions) {
     this.run = options.run;
@@ -93,26 +100,15 @@ export class StationScene implements Scene {
 
   update(dt: number, input: Input): void {
     this.mouse = input.mouse;
+    this.touch = input.usingTouch;
     this.messageTimer = Math.max(0, this.messageTimer - dt);
 
     BUILDABLE.forEach((id, i) => {
       if (input.wasPressed(HOTKEYS[i])) this.pickTool(id);
     });
-    if (input.wasPressed("Escape")) {
-      this.tool = null;
-      this.inspected = null;
-    }
-    if (input.wasPressed("KeyR")) {
-      const step = input.isDown("ShiftLeft") || input.isDown("ShiftRight") ? -1 : 1;
-      if (this.tool) {
-        this.rotations[this.tool] = mod6(this.rotations[this.tool] + step);
-      } else if (this.inspected) {
-        this.rotateInspected(step);
-      }
-    }
-    if ((input.wasPressed("Delete") || input.wasPressed("Backspace")) && this.inspected) {
-      this.handleSell(this.inspected);
-    }
+    if (input.wasPressed("Escape")) this.deselect();
+    if (input.wasPressed("KeyR")) this.rotate(input.isDown("ShiftLeft") || input.isDown("ShiftRight") ? -1 : 1);
+    if (input.wasPressed("Delete") || input.wasPressed("Backspace")) this.sellInspected();
 
     const local = { x: this.mouse.x - this.gridCenter.x, y: this.mouse.y - this.gridCenter.y };
     const h = pixelToHex(local, this.hexSize);
@@ -126,6 +122,25 @@ export class StationScene implements Scene {
   private pickTool(id: PartId): void {
     this.tool = this.tool === id ? null : id;
     this.inspected = null;
+  }
+
+  // Puts the tool away, or lets go of the selected part.
+  private deselect(): void {
+    this.tool = null;
+    this.inspected = null;
+  }
+
+  // Turns the tool's next part, or the selected part, one step clockwise (step 1) or anticlockwise (step -1).
+  private rotate(step: number): void {
+    if (this.tool) {
+      this.rotations[this.tool] = mod6(this.rotations[this.tool] + step);
+    } else if (this.inspected) {
+      this.rotateInspected(step);
+    }
+  }
+
+  private sellInspected(): void {
+    if (this.inspected) this.handleSell(this.inspected);
   }
 
   private handleLeftClick(): void {
@@ -159,6 +174,22 @@ export class StationScene implements Scene {
       if (this.problems.length === 0) this.options.onLaunch(this.run);
       return;
     }
+    if (pointInRect(this.mouse, this.rotateLeftButton)) {
+      this.rotate(-1);
+      return;
+    }
+    if (pointInRect(this.mouse, this.rotateRightButton)) {
+      this.rotate(1);
+      return;
+    }
+    if (pointInRect(this.mouse, this.sellButton)) {
+      this.sellInspected();
+      return;
+    }
+    if (pointInRect(this.mouse, this.doneButton)) {
+      this.deselect();
+      return;
+    }
     if (!this.tool) {
       this.inspected = this.hovered && partAt(this.run.ship, this.hovered) ? this.hovered : null;
       return;
@@ -170,7 +201,7 @@ export class StationScene implements Scene {
   private rotateInspected(step: number): void {
     const part = this.inspectedPart();
     if (!part) return;
-    if (!usesRotation(part)) {
+    if (!usesRotation(part.type)) {
       this.flash(`${PARTS[part.type].name} doesn't need rotating.`);
       return;
     }
@@ -218,19 +249,24 @@ export class StationScene implements Scene {
     const centerLeft = PALETTE_WIDTH + 32;
     const centerRight = width - SIDE_WIDTH - 32;
     const gridTop = TOP_BAR;
-    const gridBottom = height - BOARD_HEIGHT - 44;
+    const gridBottom = height - BOARD_HEIGHT - 44 - ACTION_BAR;
     this.hexSize = Math.min(MAX_HEX_SIZE, (gridBottom - gridTop) / 17, (centerRight - centerLeft) / 19);
     this.gridCenter = { x: (centerLeft + centerRight) / 2, y: (gridTop + gridBottom) / 2 };
 
     this.renderTopBar(ctx);
     this.renderGrid(ctx);
+    this.renderActionBar(ctx, gridBottom + ACTION_BAR / 2);
     this.renderPalette(ctx, height);
     this.renderSidePanel(ctx, width, height);
     this.renderContractBoard(ctx, { x: centerLeft, y: height - BOARD_HEIGHT - 36, w: centerRight - centerLeft, h: BOARD_HEIGHT });
 
-    const help = this.tool
-      ? "Left-click buy & place · Right-click sell · R / Shift+R rotate · Esc or click part again to stop building"
-      : "Click a part to select it · R / Shift+R rotate · Del sell · 1-8 pick a part to build";
+    const help = this.touch
+      ? this.tool
+        ? "Tap a hex to buy & place · Tap the part again or Done to stop building"
+        : "Tap a part on the ship to select it · Pick a part on the left to build"
+      : this.tool
+        ? "Left-click buy & place · Right-click sell · R / Shift+R rotate · Esc or click part again to stop building"
+        : "Click a part to select it · R / Shift+R rotate · Del sell · 1-8 pick a part to build";
     drawText(ctx, help, this.gridCenter.x, height - 18, { align: "center", color: THEME.muted, size: 12 });
   }
 
@@ -379,7 +415,7 @@ export class StationScene implements Scene {
     if (!this.tool && shown) {
       drawText(ctx, `HP ${shown.hp} / ${def.maxHp}`, x, y, { size: 12, color: shown.hp < def.maxHp ? THEME.warn : THEME.text });
       y += 16;
-      if (usesRotation(shown)) {
+      if (usesRotation(shown.type)) {
         const label = shown.type === "engine" ? "Exhaust points" : "Facing";
         drawText(ctx, `${label} ${FACING_NAMES[shown.rotation]}`, x, y, { size: 12 });
         y += 16;
@@ -393,9 +429,9 @@ export class StationScene implements Scene {
       drawText(ctx, lineText, x, y, { size: 12 });
       y += 16;
     }
-    if (this.inspected && shown && shown.type !== "bridge") {
+    if (this.inspected && shown && shown.type !== "bridge" && !this.touch) {
       y += 8;
-      const actions = usesRotation(shown) ? "R rotate · Del sell · Esc deselect" : "Del sell · Esc deselect";
+      const actions = usesRotation(shown.type) ? "R rotate · Del sell · Esc deselect" : "Del sell · Esc deselect";
       drawText(ctx, actions, x, y, { size: 12, color: THEME.accent });
     }
   }
@@ -530,6 +566,26 @@ export class StationScene implements Scene {
     });
   }
 
+  // The keyboard's R, Shift+R, Del and Esc as buttons, shown while building or with a part selected.
+  private renderActionBar(ctx: CanvasRenderingContext2D, y: number): void {
+    const inspected = this.inspectedPart();
+    const active = this.tool ?? inspected?.type;
+    if (!active) {
+      this.rotateLeftButton = this.rotateRightButton = this.sellButton = this.doneButton = NO_RECT;
+      return;
+    }
+    const gap = 8;
+    const left = this.gridCenter.x - (ACTION_WIDTH * 4 + gap * 3) / 2;
+    const at = (i: number): Rect => ({ x: left + i * (ACTION_WIDTH + gap), y: y - 13, w: ACTION_WIDTH, h: 26 });
+    [this.rotateLeftButton, this.rotateRightButton, this.sellButton, this.doneButton] = [at(0), at(1), at(2), at(3)];
+    const canRotate = usesRotation(active);
+    const canSell = !this.tool && inspected !== undefined && inspected.type !== "bridge";
+    this.smallButton(ctx, this.rotateLeftButton, "↺ Rotate", canRotate);
+    this.smallButton(ctx, this.rotateRightButton, "Rotate ↻", canRotate);
+    this.smallButton(ctx, this.sellButton, inspected && canSell ? `Sell $${sellValue(inspected)}` : "Sell", canSell);
+    this.smallButton(ctx, this.doneButton, "Done", true);
+  }
+
   private smallButton(ctx: CanvasRenderingContext2D, r: Rect, label: string, enabled: boolean): void {
     const hovered = enabled && pointInRect(this.mouse, r);
     ctx.fillStyle = !enabled ? "#1a2233" : hovered ? "#2f5ea8" : "#1e2c48";
@@ -603,7 +659,7 @@ export class StationScene implements Scene {
 }
 
 // Engines and weapons care which way they face; nothing else does.
-const usesRotation = (part: PlacedPart): boolean => part.type === "engine" || PARTS[part.type].weapon !== null;
+const usesRotation = (type: PartId): boolean => type === "engine" || PARTS[type].weapon !== null;
 
 const FACING_NAMES = ["forward", "forward-right", "back-right", "back", "back-left", "forward-left"];
 
