@@ -8,10 +8,12 @@ import { destination, expectedPay, launchCost, launchProblems, tripDistance, typ
 import { buyPart, repairAll, repairCost, sellPart, sellValue } from "../economy/shop";
 import type { Input } from "../engine/input";
 import type { Scene } from "../engine/scene";
+import { DEFAULT_MIN_VIEW, type Size } from "../engine/view";
 import { hexesInRadius, hexKey, hexToPixel, mod6, neighbor, pixelToHex, type Hex, type Point } from "../hex/hex";
 import { drawHex } from "../render/drawHex";
 import { drawFiringArc, drawPart, drawShip } from "../render/drawShip";
-import { drawButton, drawPanel, drawText, pointInRect, THEME, wrapText, type Rect } from "../render/ui";
+import { STATION_TABS, touchStationLayout, type StationTab } from "../render/stationLayout";
+import { drawButton, drawPanel, drawText, pointInRect, THEME, wrapText, type Rect, type TextStyle } from "../render/ui";
 import { partAt, rotatePart, shipValue, type PlacedPart } from "../ship/ship";
 import { computeShipStats, type ShipStats } from "../ship/stats";
 import { validateShip, type Validation } from "../ship/validate";
@@ -33,6 +35,11 @@ const REPORT_SECONDS = 6;
 const HOTKEYS = ["Digit1", "Digit2", "Digit3", "Digit4", "Digit5", "Digit6", "Digit7", "Digit8", "Digit9"];
 
 const NO_RECT: Rect = { x: 0, y: 0, w: 0, h: 0 };
+
+// On a touch screen the station has its own layout (see touchStationLayout), drawn full size down to this.
+const TOUCH_MIN_VIEW: Size = { width: 640, height: 360 };
+
+const TAB_LABELS: Record<StationTab, string> = { parts: "Parts", ship: "Ship", supplies: "Supplies", trip: "Trip", cargo: "Cargo" };
 
 export type StationOptions = {
   run: Run;
@@ -71,7 +78,8 @@ export class StationScene implements Scene {
   private message = "";
   private messageColor: string = THEME.warn;
   private messageTimer = 0;
-  private touch = false; // the player is on a touch screen, so help text talks about tapping
+  private touch = false; // the player is on a touch screen, so the station uses its touch layout
+  private tab: StationTab = "parts"; // the touch layout's open tab
 
   // Layout, recalculated every render from the canvas size.
   private hexSize = MAX_HEX_SIZE;
@@ -87,6 +95,7 @@ export class StationScene implements Scene {
   private rotateRightButton = NO_RECT;
   private sellButton = NO_RECT;
   private doneButton = NO_RECT;
+  private tabButtons: Rect[] = [];
 
   constructor(private options: StationOptions) {
     this.run = options.run;
@@ -96,6 +105,15 @@ export class StationScene implements Scene {
     this.launchCost = launchCost(this.run);
     this.tripFuel = tripFuelEstimate(this.stats, tripDistance(this.run));
     if (options.report) this.flash(options.report, THEME.good, REPORT_SECONDS);
+  }
+
+  minView(touch: boolean): Size {
+    return touch ? TOUCH_MIN_VIEW : DEFAULT_MIN_VIEW;
+  }
+
+  // The touch layout keeps a slot for the mute button at the end of its status line.
+  muteButton(width: number, height: number): Rect | undefined {
+    return this.touch ? touchStationLayout(width, height).mute : undefined;
   }
 
   update(dt: number, input: Input): void {
@@ -144,6 +162,11 @@ export class StationScene implements Scene {
   }
 
   private handleLeftClick(): void {
+    const tab = this.tabButtons.findIndex((r) => pointInRect(this.mouse, r));
+    if (tab >= 0) {
+      this.tab = STATION_TABS[tab];
+      return;
+    }
     const row = this.paletteRows.findIndex((r) => pointInRect(this.mouse, r));
     if (row >= 0) {
       this.pickTool(BUILDABLE[row]);
@@ -192,6 +215,7 @@ export class StationScene implements Scene {
     }
     if (!this.tool) {
       this.inspected = this.hovered && partAt(this.run.ship, this.hovered) ? this.hovered : null;
+      if (this.inspected) this.tab = "parts";
       return;
     }
     if (this.hovered) this.apply(buyPart(this.run, this.hovered, this.tool, this.rotations[this.tool]));
@@ -246,6 +270,18 @@ export class StationScene implements Scene {
     ctx.fillStyle = THEME.background;
     ctx.fillRect(0, 0, width, height);
 
+    // Only what this render draws can be clicked.
+    this.paletteRows = [];
+    this.contractCards = [];
+    this.tabButtons = [];
+    this.hireButton = this.fireButton = this.repairButton = this.refuelButton = this.launchButton = NO_RECT;
+    this.rotateLeftButton = this.rotateRightButton = this.sellButton = this.doneButton = NO_RECT;
+
+    if (this.touch) {
+      this.renderTouch(ctx, width, height);
+      return;
+    }
+
     const centerLeft = PALETTE_WIDTH + 32;
     const centerRight = width - SIDE_WIDTH - 32;
     const gridTop = TOP_BAR;
@@ -255,19 +291,145 @@ export class StationScene implements Scene {
 
     this.renderTopBar(ctx);
     this.renderGrid(ctx);
-    this.renderActionBar(ctx, gridBottom + ACTION_BAR / 2);
+    const actionWidth = ACTION_WIDTH * 4 + 8 * 3;
+    this.renderActionBar(ctx, { x: this.gridCenter.x - actionWidth / 2, y: gridBottom + ACTION_BAR / 2 - 13, w: actionWidth, h: 26 });
     this.renderPalette(ctx, height);
     this.renderSidePanel(ctx, width, height);
     this.renderContractBoard(ctx, { x: centerLeft, y: height - BOARD_HEIGHT - 36, w: centerRight - centerLeft, h: BOARD_HEIGHT });
 
-    const help = this.touch
-      ? this.tool
-        ? "Tap a hex to buy & place · Tap the part again or Done to stop building"
-        : "Tap a part on the ship to select it · Pick a part on the left to build"
-      : this.tool
-        ? "Left-click buy & place · Right-click sell · R / Shift+R rotate · Esc or click part again to stop building"
-        : "Click a part to select it · R / Shift+R rotate · Del sell · 1-8 pick a part to build";
+    const help = this.tool
+      ? "Left-click buy & place · Right-click sell · R / Shift+R rotate · Esc or click part again to stop building"
+      : "Click a part to select it · R / Shift+R rotate · Del sell · 1-8 pick a part to build";
     drawText(ctx, help, this.gridCenter.x, height - 18, { align: "center", color: THEME.muted, size: 12 });
+  }
+
+  // The grid on the left at full height; one tab of the side panel at a time on the right.
+  private renderTouch(ctx: CanvasRenderingContext2D, width: number, height: number): void {
+    const layout = touchStationLayout(width, height);
+    const { grid, body } = layout;
+    this.hexSize = layout.hexSize;
+    this.gridCenter = { x: grid.x + grid.w / 2, y: grid.y + grid.h / 2 };
+    this.renderGrid(ctx);
+    if (this.messageTimer > 0) {
+      let y = grid.y + 10;
+      for (const lineText of wrapText(ctx, this.message, grid.w, 14)) {
+        drawText(ctx, lineText, this.gridCenter.x, y, { align: "center", size: 14, bold: true, color: this.messageColor });
+        y += 18;
+      }
+    }
+
+    const planet = PLANETS[this.run.docked];
+    const statusY = layout.status.y + layout.status.h / 2;
+    drawText(ctx, planet.name, layout.status.x, statusY, { size: 15, bold: true, color: planet.color });
+    const nameWidth = ctx.measureText(planet.name).width;
+    drawText(ctx, `  ·  Day ${this.run.day}  ·  $${this.run.money}`, layout.status.x + nameWidth, statusY, { size: 15, bold: true });
+
+    this.tabButtons = layout.tabs;
+    STATION_TABS.forEach((tab, i) => {
+      const r = layout.tabs[i];
+      const open = tab === this.tab;
+      ctx.fillStyle = open ? "#1e2c48" : THEME.panel;
+      ctx.fillRect(r.x, r.y, r.w, r.h);
+      ctx.strokeStyle = THEME.panelBorder;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1);
+      if (open) {
+        ctx.fillStyle = THEME.accent;
+        ctx.fillRect(r.x, r.y + r.h - 3, r.w, 3);
+      }
+      drawText(ctx, TAB_LABELS[tab], r.x + r.w / 2, r.y + r.h / 2, { align: "center", size: 12, bold: open, color: open ? THEME.text : THEME.muted });
+    });
+
+    drawPanel(ctx, body);
+    const column = { left: body.x + 10, right: body.x + body.w - 10 };
+    const top = body.y + 12;
+    const bottom = body.y + body.h - 8;
+    switch (this.tab) {
+      case "parts":
+        this.renderTouchParts(ctx, body);
+        break;
+      case "ship":
+        this.renderShipSection(ctx, column, top, false);
+        break;
+      case "supplies":
+        this.renderSuppliesSection(ctx, column, top);
+        break;
+      case "trip": {
+        let y = top;
+        for (const lineText of wrapText(ctx, dangerText(dangerOutlook(this.run)), column.right - column.left, 13)) {
+          drawText(ctx, lineText, column.left, y, { bold: true, color: THEME.warn });
+          y += 17;
+        }
+        this.renderTripSection(ctx, column, y + 10, bottom);
+        break;
+      }
+      case "cargo":
+        this.renderTouchCargo(ctx, body);
+        break;
+    }
+
+    this.launchButton = layout.launch;
+    this.renderLaunchButton(ctx);
+  }
+
+  // Part tiles to build with; while building or with a part selected, its details and what you can do with it.
+  private renderTouchParts(ctx: CanvasRenderingContext2D, body: Rect): void {
+    const pad = 6;
+    if (this.tool || this.inspectedPart()) {
+      const actions = { x: body.x + pad, y: body.y + body.h - pad - 30, w: body.w - 2 * pad, h: 30 };
+      this.renderPartInfo(ctx, body.x + 10, body.y + 12, body.w - 20, actions.y - 8);
+      this.renderActionBar(ctx, actions);
+      return;
+    }
+
+    const columns = 3;
+    const rows = Math.ceil(BUILDABLE.length / columns);
+    const tileWidth = (body.w - pad * (columns + 1)) / columns;
+    const tileHeight = (body.h - pad * (rows + 1)) / rows;
+    this.paletteRows = BUILDABLE.map((_, i) => ({
+      x: body.x + pad + (i % columns) * (tileWidth + pad),
+      y: body.y + pad + Math.floor(i / columns) * (tileHeight + pad),
+      w: tileWidth,
+      h: tileHeight,
+    }));
+    BUILDABLE.forEach((id, i) => {
+      const r = this.paletteRows[i];
+      const def = PARTS[id];
+      ctx.fillStyle = "#182238";
+      ctx.fillRect(r.x, r.y, r.w, r.h);
+      const iconSize = Math.min(14, r.h / 5);
+      ctx.save();
+      ctx.translate(r.x + r.w / 2, r.y + 6 + iconSize);
+      drawPart(ctx, { hex: { q: 0, r: 0 }, type: id, rotation: id === "engine" ? 3 : 0, hp: def.maxHp }, iconSize, false);
+      ctx.restore();
+      const nameLines = wrapText(ctx, def.name, r.w - 6, 11);
+      let y = r.y + 10 + iconSize * 2;
+      for (const lineText of nameLines.slice(0, 2)) {
+        drawText(ctx, lineText, r.x + r.w / 2, y, { align: "center", size: 11 });
+        y += 12;
+      }
+      // The price sits at the bottom of the tile, or under the name when it wraps onto two lines.
+      const affordable = this.run.money >= def.cost;
+      const priceY = Math.max(y, r.y + r.h - 9);
+      drawText(ctx, `$${def.cost}`, r.x + r.w / 2, priceY, { align: "center", size: 11, bold: true, color: affordable ? THEME.muted : THEME.bad });
+    });
+  }
+
+  // How full the hold is, the reputation it's earning, and the contracts as a two-column grid of cards.
+  private renderTouchCargo(ctx: CanvasRenderingContext2D, body: Rect): void {
+    const loaded = cargoUnits(this.run.cargo);
+    const capacity = this.stats.cargoCapacity;
+    const left = body.x + 10;
+    drawText(ctx, `To ${PLANETS[destination(this.run)].name}  ·  Hold ${loaded} / ${capacity} units`, left, body.y + 12, {
+      bold: true,
+      color: loaded > capacity ? THEME.bad : THEME.text,
+    });
+    const rep = reputation(this.run.delivered);
+    drawText(ctx, `${rep.rank} · +${Math.round(rep.payBonus * 100)}% pay${rep.next ? ` · ${rep.next.rank} at ${rep.next.at}` : ""}`, left, body.y + 30, {
+      color: THEME.accent,
+      size: 12,
+    });
+    this.renderContractCards(ctx, { x: body.x + 6, y: body.y + 42, w: body.w - 12, h: body.h - 48 }, 2);
   }
 
   private renderTopBar(ctx: CanvasRenderingContext2D): void {
@@ -386,53 +548,48 @@ export class StationScene implements Scene {
       drawText(ctx, String(i + 1), r.x + r.w - 10, r.y + r.h / 2, { align: "right", color: THEME.muted });
     });
 
-    let y = panel.y + 40 + BUILDABLE.length * ROW_HEIGHT + 16;
-    const x = panel.x + 14;
-    const textWidth = panel.w - 28;
+    this.renderPartInfo(ctx, panel.x + 14, panel.y + 40 + BUILDABLE.length * ROW_HEIGHT + 16, panel.w - 28, panel.y + panel.h - 8);
+  }
 
-    // Building: describe the tool. Inspecting: describe the selected part, else the hovered one.
+  // Building: describe the tool. Inspecting: describe the selected part, else the hovered one.
+  // Lines that would pass `bottom` aren't drawn.
+  private renderPartInfo(ctx: CanvasRenderingContext2D, x: number, top: number, textWidth: number, bottom: number): void {
+    let y = top;
+    const line = (text: string, style: TextStyle, height: number): void => {
+      if (y <= bottom) drawText(ctx, text, x, y, style);
+      y += height;
+    };
     const shown = this.inspectedPart() ?? (this.hovered ? partAt(this.run.ship, this.hovered) : undefined);
     const type = this.tool ?? shown?.type;
     if (!type) {
-      drawText(ctx, "Nothing selected", x, y, { bold: true, color: THEME.muted });
-      y += 20;
+      line("Nothing selected", { bold: true, color: THEME.muted }, 20);
       for (const lineText of wrapText(ctx, "Click a part on the ship to select it, or pick one above to build.", textWidth)) {
-        drawText(ctx, lineText, x, y, { color: THEME.muted });
-        y += 17;
+        line(lineText, { color: THEME.muted }, 17);
       }
       return;
     }
 
     const def = PARTS[type];
     const title = this.tool ? `Building: ${def.name}` : this.inspected ? `Selected: ${def.name}` : def.name;
-    drawText(ctx, title, x, y, { bold: true, color: def.color });
-    y += 20;
+    line(title, { bold: true, color: def.color }, 20);
     for (const lineText of wrapText(ctx, def.description, textWidth)) {
-      drawText(ctx, lineText, x, y, { color: THEME.muted });
-      y += 17;
+      line(lineText, { color: THEME.muted }, 17);
     }
     y += 6;
     if (!this.tool && shown) {
-      drawText(ctx, `HP ${shown.hp} / ${def.maxHp}`, x, y, { size: 12, color: shown.hp < def.maxHp ? THEME.warn : THEME.text });
-      y += 16;
+      line(`HP ${shown.hp} / ${def.maxHp}`, { size: 12, color: shown.hp < def.maxHp ? THEME.warn : THEME.text }, 16);
       if (usesRotation(shown.type)) {
         const label = shown.type === "engine" ? "Exhaust points" : "Facing";
-        drawText(ctx, `${label} ${FACING_NAMES[shown.rotation]}`, x, y, { size: 12 });
-        y += 16;
+        line(`${label} ${FACING_NAMES[shown.rotation]}`, { size: 12 }, 16);
       }
-      if (shown.type !== "bridge") {
-        drawText(ctx, `Sells for $${sellValue(shown)}`, x, y, { size: 12 });
-        y += 16;
-      }
+      if (shown.type !== "bridge") line(`Sells for $${sellValue(shown)}`, { size: 12 }, 16);
     }
     for (const lineText of partDetails(type)) {
-      drawText(ctx, lineText, x, y, { size: 12 });
-      y += 16;
+      line(lineText, { size: 12 }, 16);
     }
     if (this.inspected && shown && shown.type !== "bridge" && !this.touch) {
       y += 8;
-      const actions = usesRotation(shown.type) ? "R rotate · Del sell · Esc deselect" : "Del sell · Esc deselect";
-      drawText(ctx, actions, x, y, { size: 12, color: THEME.accent });
+      line(usesRotation(shown.type) ? "R rotate · Del sell · Esc deselect" : "Del sell · Esc deselect", { size: 12, color: THEME.accent }, 16);
     }
   }
 
@@ -454,13 +611,15 @@ export class StationScene implements Scene {
     drawText(ctx, value, column.right, y, { align: "right", color });
   }
 
-  // Ship stats, hull and the repair button, starting at `y`. Returns the y below it.
-  private renderShipSection(ctx: CanvasRenderingContext2D, column: Column, top: number): number {
+  // Ship stats, hull and the repair button, starting at `top`. Returns the y below it.
+  private renderShipSection(ctx: CanvasRenderingContext2D, column: Column, top: number, heading = true): number {
     const { left, right } = column;
     const s = this.stats;
     let y = top;
-    drawText(ctx, "SHIP", left, y, { bold: true, color: THEME.muted });
-    y += 24;
+    if (heading) {
+      drawText(ctx, "SHIP", left, y, { bold: true, color: THEME.muted });
+      y += 24;
+    }
     const thrustDrift = thrustSpin(s, s.main);
     const brakeDrift = thrustSpin(s, s.brake);
     const maxTurn = s.turnRate * FLIGHT.turnScale;
@@ -589,22 +748,20 @@ export class StationScene implements Scene {
     });
   }
 
-  // The keyboard's R, Shift+R, Del and Esc as buttons, shown while building or with a part selected.
-  private renderActionBar(ctx: CanvasRenderingContext2D, y: number): void {
+  // The keyboard's R, Shift+R, Del and Esc as four buttons across `row`, shown while building or with a part selected.
+  private renderActionBar(ctx: CanvasRenderingContext2D, row: Rect): void {
     const inspected = this.inspectedPart();
     const active = this.tool ?? inspected?.type;
-    if (!active) {
-      this.rotateLeftButton = this.rotateRightButton = this.sellButton = this.doneButton = NO_RECT;
-      return;
-    }
+    if (!active) return;
     const gap = 8;
-    const left = this.gridCenter.x - (ACTION_WIDTH * 4 + gap * 3) / 2;
-    const at = (i: number): Rect => ({ x: left + i * (ACTION_WIDTH + gap), y: y - 13, w: ACTION_WIDTH, h: 26 });
+    const width = (row.w - gap * 3) / 4;
+    const at = (i: number): Rect => ({ x: row.x + i * (width + gap), y: row.y, w: width, h: row.h });
     [this.rotateLeftButton, this.rotateRightButton, this.sellButton, this.doneButton] = [at(0), at(1), at(2), at(3)];
     const canRotate = usesRotation(active);
     const canSell = !this.tool && inspected !== undefined && inspected.type !== "bridge";
-    this.smallButton(ctx, this.rotateLeftButton, "↺ Rotate", canRotate);
-    this.smallButton(ctx, this.rotateRightButton, "Rotate ↻", canRotate);
+    const roomy = width >= ACTION_WIDTH;
+    this.smallButton(ctx, this.rotateLeftButton, roomy ? "↺ Rotate" : "↺", canRotate);
+    this.smallButton(ctx, this.rotateRightButton, roomy ? "Rotate ↻" : "↻", canRotate);
     this.smallButton(ctx, this.sellButton, inspected && canSell ? `Sell $${sellValue(inspected)}` : "Sell", canSell);
     this.smallButton(ctx, this.doneButton, "Done", true);
   }
@@ -640,21 +797,33 @@ export class StationScene implements Scene {
       color: loaded > capacity ? THEME.bad : THEME.text,
     });
 
+    this.renderContractCards(ctx, { x: area.x, y: area.y + 16, w: area.w, h: area.h - 16 }, this.run.cargo.length + this.run.offers.length);
+  }
+
+  // Loaded contracts first, then the rest of the board, in rows of `columns` cards filling `area`.
+  private renderContractCards(ctx: CanvasRenderingContext2D, area: Rect, columns: number): void {
+    const loaded = cargoUnits(this.run.cargo);
+    const capacity = this.stats.cargoCapacity;
     const cards = [
       ...this.run.cargo.map((contract) => ({ contract, loaded: true })),
       ...this.run.offers.map((contract) => ({ contract, loaded: false })),
     ];
-    const gap = 10;
-    const cardWidth = cards.length > 0 ? (area.w - gap * (cards.length - 1)) / cards.length : 0;
-    const top = area.y + 16;
-    const cardHeight = area.h - 16;
-    this.contractCards = cards.map((card, i) => ({ ...card, rect: { x: area.x + i * (cardWidth + gap), y: top, w: cardWidth, h: cardHeight } }));
-
     if (cards.length === 0) {
-      drawText(ctx, "No contracts on the board.", area.x, top + 30, { color: THEME.muted });
+      drawText(ctx, "No contracts on the board.", area.x, area.y + 30, { color: THEME.muted });
       return;
     }
 
+    const gap = this.touch ? 6 : 10;
+    const rows = Math.ceil(cards.length / columns);
+    const cardWidth = (area.w - gap * (columns - 1)) / columns;
+    const cardHeight = (area.h - gap * (rows - 1)) / rows;
+    this.contractCards = cards.map((card, i) => ({
+      ...card,
+      rect: { x: area.x + (i % columns) * (cardWidth + gap), y: area.y + Math.floor(i / columns) * (cardHeight + gap), w: cardWidth, h: cardHeight },
+    }));
+
+    // Touch cards are shorter, so their lines sit closer together.
+    const [nameY, unitsY, payY, paySize] = this.touch ? [16, 34, 56, 18] : [20, 44, 72, 20];
     for (const { rect, contract, loaded: isLoaded } of this.contractCards) {
       const fits = isLoaded || contract.units <= capacity - loaded;
       const hovered = pointInRect(this.mouse, rect);
@@ -666,12 +835,13 @@ export class StationScene implements Scene {
 
       const x = rect.x + 12;
       const faded = fits ? THEME.text : THEME.muted;
-      drawText(ctx, contract.cargo, x, rect.y + 20, { bold: true, color: faded });
-      drawText(ctx, `T${contract.tier + 1}`, rect.x + rect.w - 12, rect.y + 20, { align: "right", bold: true, size: 12, color: THEME.accent });
-      drawText(ctx, `${contract.units} units × $${contract.payPerUnit}`, x, rect.y + 44, { color: THEME.muted, size: 12 });
-      drawText(ctx, `$${contractPay(contract)}`, x, rect.y + 72, { size: 20, bold: true, color: fits ? THEME.good : THEME.muted });
-      const footer = isLoaded ? "LOADED · click to unload" : fits ? "Click to load" : "Not enough hold space";
-      drawText(ctx, footer, x, rect.y + rect.h - 14, { size: 11, color: isLoaded ? THEME.good : fits ? THEME.muted : THEME.bad });
+      drawText(ctx, contract.cargo, x, rect.y + nameY, { bold: true, color: faded });
+      drawText(ctx, `T${contract.tier + 1}`, rect.x + rect.w - 12, rect.y + nameY, { align: "right", bold: true, size: 12, color: THEME.accent });
+      drawText(ctx, `${contract.units} units × $${contract.payPerUnit}`, x, rect.y + unitsY, { color: THEME.muted, size: 12 });
+      drawText(ctx, `$${contractPay(contract)}`, x, rect.y + payY, { size: paySize, bold: true, color: fits ? THEME.good : THEME.muted });
+      const tap = this.touch ? "tap" : "click";
+      const footer = isLoaded ? `LOADED · ${tap} to unload` : fits ? `${this.touch ? "Tap" : "Click"} to load` : "Not enough hold space";
+      drawText(ctx, footer, x, rect.y + rect.h - (this.touch ? 10 : 14), { size: 11, color: isLoaded ? THEME.good : fits ? THEME.muted : THEME.bad });
     }
   }
 

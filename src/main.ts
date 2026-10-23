@@ -8,7 +8,7 @@ import { FlightScene } from "./scenes/FlightScene";
 import { GameOverScene } from "./scenes/GameOverScene";
 import { StationScene } from "./scenes/StationScene";
 import { drawMuteButton, muteButtonRect } from "./render/muteButton";
-import { drawText, pointInRect, THEME } from "./render/ui";
+import { drawText, pointInRect, THEME, type Rect } from "./render/ui";
 import { addScore, loadRecords, saveRecords, scoreOf } from "./save/records";
 import { clearRun, loadRun, saveRun } from "./save/save";
 
@@ -94,6 +94,8 @@ function drawTurnSideways(): void {
   drawText(ctx, "Turn your phone sideways to play", width / 2, height / 2 + 10, { align: "center", size: 32, bold: true });
 }
 
+const muteButton = (): Rect => scenes.scene?.muteButton?.(width, height) ?? muteButtonRect(width);
+
 const withBounty = (report: string, bounty: number): string => (bounty > 0 ? `${report} Bounties: +$${bounty}` : report);
 
 const saved = loadRun();
@@ -107,7 +109,7 @@ startLoop(
       return;
     }
     // The mute button sits over every screen, so it takes its click before the scene sees it.
-    const clickedMute = input.wasClicked(0) && pointInRect(input.mouse, muteButtonRect(width));
+    const clickedMute = input.wasClicked(0) && pointInRect(input.mouse, muteButton());
     if (clickedMute) input.consumeClick(0);
     if (clickedMute || input.wasPressed("KeyM")) sound.toggleMute();
     scenes.scene?.update(dt, input);
@@ -120,9 +122,9 @@ startLoop(
       return;
     }
     scenes.scene?.render(ctx, width, height);
-    const muteButton = muteButtonRect(width);
-    const hovered = pointInRect(input.mouse, muteButton);
-    drawMuteButton(ctx, muteButton, sound.isMuted, hovered);
+    const muteRect = muteButton();
+    const hovered = pointInRect(input.mouse, muteRect);
+    drawMuteButton(ctx, muteRect, sound.isMuted, hovered);
     canvas.style.cursor = hovered ? "pointer" : "";
   },
 );

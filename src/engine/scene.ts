@@ -1,3 +1,4 @@
+import type { Rect } from "../render/ui";
 import type { Input } from "./input";
 import type { Size } from "./view";
 
@@ -6,6 +7,8 @@ export interface Scene {
   exit?(): void;
   // The smallest logical size this scene lays out in; smaller screens draw it scaled down. Defaults to DEFAULT_MIN_VIEW.
   minView?(touch: boolean): Size;
+  // Where the mute button goes, if not its usual top-right corner (see muteButtonRect).
+  muteButton?(width: number, height: number): Rect | undefined;
   update(dt: number, input: Input): void;
   render(ctx: CanvasRenderingContext2D, width: number, height: number): void;
 }
