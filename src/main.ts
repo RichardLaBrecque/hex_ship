@@ -3,6 +3,7 @@ import { afterFlight, arrive, launch, newRun, towBack, type Run } from "./econom
 import { Input } from "./engine/input";
 import { startLoop } from "./engine/loop";
 import { SceneManager } from "./engine/scene";
+import { fitView } from "./engine/view";
 import { FlightScene } from "./scenes/FlightScene";
 import { GameOverScene } from "./scenes/GameOverScene";
 import { StationScene } from "./scenes/StationScene";
@@ -23,14 +24,16 @@ window.addEventListener("pointerdown", () => sound.unlock());
 let width = 0;
 let height = 0;
 
-// Size the backing store for the device pixel ratio but draw in CSS pixels.
+// Size the backing store for the device pixel ratio but draw in logical pixels (see fitView).
 function resize(): void {
   const dpr = window.devicePixelRatio || 1;
-  width = window.innerWidth;
-  height = window.innerHeight;
-  canvas.width = Math.floor(width * dpr);
-  canvas.height = Math.floor(height * dpr);
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const view = fitView(window.innerWidth, window.innerHeight);
+  width = view.width;
+  height = view.height;
+  input.scale = view.scale;
+  canvas.width = Math.floor(window.innerWidth * dpr);
+  canvas.height = Math.floor(window.innerHeight * dpr);
+  ctx.setTransform(dpr * view.scale, 0, 0, dpr * view.scale, 0, 0);
 }
 window.addEventListener("resize", resize);
 resize();

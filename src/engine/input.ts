@@ -3,6 +3,7 @@ import type { Point } from "../hex/hex";
 // Tracks held keys and mouse state, plus "just pressed" edges that last one update.
 export class Input {
   mouse: Point = { x: 0, y: 0 };
+  scale = 1; // CSS pixels per logical pixel (see fitView); pointer positions are divided by it
   private held = new Set<string>();
   private pressed = new Set<string>();
   private mouseButtonsPressed = new Set<number>();
@@ -15,7 +16,7 @@ export class Input {
     window.addEventListener("keyup", (e) => this.held.delete(e.code));
     window.addEventListener("blur", () => this.held.clear());
     canvas.addEventListener("mousemove", (e) => {
-      this.mouse = { x: e.offsetX, y: e.offsetY };
+      this.mouse = { x: e.offsetX / this.scale, y: e.offsetY / this.scale };
     });
     canvas.addEventListener("mousedown", (e) => this.mouseButtonsPressed.add(e.button));
     canvas.addEventListener("contextmenu", (e) => e.preventDefault());
