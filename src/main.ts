@@ -8,7 +8,7 @@ import { FlightScene } from "./scenes/FlightScene";
 import { GameOverScene } from "./scenes/GameOverScene";
 import { StationScene } from "./scenes/StationScene";
 import { drawMuteButton, muteButtonRect } from "./render/muteButton";
-import { pointInRect } from "./render/ui";
+import { drawText, pointInRect, THEME } from "./render/ui";
 import { addScore, loadRecords, saveRecords, scoreOf } from "./save/records";
 import { clearRun, loadRun, saveRun } from "./save/save";
 
@@ -78,6 +78,16 @@ function endRun(run: Run): void {
   scenes.switchTo(new GameOverScene({ run, records, newBests, onRestart: () => openStation(newRun()) }));
 }
 
+// The game is laid out for landscape. A phone held upright pauses behind a note until it's turned.
+const isUpright = (): boolean => input.usingTouch && window.innerHeight > window.innerWidth;
+
+function drawTurnSideways(): void {
+  ctx.fillStyle = THEME.background;
+  ctx.fillRect(0, 0, width, height);
+  drawText(ctx, "↻", width / 2, height / 2 - 60, { align: "center", size: 64, color: THEME.accent });
+  drawText(ctx, "Turn your phone sideways to play", width / 2, height / 2 + 10, { align: "center", size: 32, bold: true });
+}
+
 const withBounty = (report: string, bounty: number): string => (bounty > 0 ? `${report} Bounties: +$${bounty}` : report);
 
 const saved = loadRun();
@@ -85,6 +95,11 @@ openStation(saved ?? newRun(), saved ? `Welcome back. Day ${saved.day}, $${saved
 
 startLoop(
   (dt) => {
+    if (isUpright()) {
+      sound.thrust(0); // flight sets it again on its next update
+      input.endFrame();
+      return;
+    }
     // The mute button sits over every screen, so it takes its click before the scene sees it.
     const clickedMute = input.wasClicked(0) && pointInRect(input.mouse, muteButtonRect(width));
     if (clickedMute) input.consumeClick(0);
@@ -93,6 +108,10 @@ startLoop(
     input.endFrame();
   },
   () => {
+    if (isUpright()) {
+      drawTurnSideways();
+      return;
+    }
     scenes.scene?.render(ctx, width, height);
     const muteButton = muteButtonRect(width);
     const hovered = pointInRect(input.mouse, muteButton);
