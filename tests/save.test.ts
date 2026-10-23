@@ -24,6 +24,7 @@ const testRun = (): Run => ({
   delivered: 9,
   kills: 4,
   valueTier: 2,
+  topTrips: 5,
   peakShipValue: 990,
   cargoEarned: 900,
   bountiesEarned: 90,
@@ -46,6 +47,13 @@ describe("saveRun / loadRun", () => {
     const file = JSON.parse(store.get(SAVE_KEY)!);
     store.set(SAVE_KEY, JSON.stringify({ ...file, version: SAVE_VERSION + 1 }));
     expect(loadRun(store, TEST_PARTS)).toBeNull();
+  });
+
+  it("loads a version 1 save, from before boss trips, as no top-danger trips yet", () => {
+    const store = memoryStore();
+    const { topTrips: _, ...older } = testRun();
+    store.set(SAVE_KEY, JSON.stringify({ version: 1, run: { ...older, ship: [...older.ship.values()] } }));
+    expect(loadRun(store, TEST_PARTS)).toEqual({ ...testRun(), topTrips: 0 });
   });
 
   it("ignores a save that isn't JSON", () => {

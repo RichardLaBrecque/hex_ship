@@ -965,8 +965,12 @@ function driftText(spin: number): string {
 const driftColor = (spin: number, maxTurn: number): string =>
   Math.abs(spin) < STRAIGHT ? THEME.text : Math.abs(spin) < maxTurn / 2 ? THEME.warn : THEME.bad;
 
-// e.g. "Danger 2 (next at $1200 ship value or 13 more kills)"
+// e.g. "Danger 2 (next at $1200 ship value or 13 more kills)", or at the top "Danger 5 (max, boss in 2 trips)"
 function dangerText(outlook: DangerOutlook): string {
+  if (outlook.bossIn !== null) {
+    const boss = outlook.bossIn === 1 ? "BOSS on this trip" : `boss in ${outlook.bossIn} trips`;
+    return `Danger ${outlook.tier} (max, ${boss})`;
+  }
   const next = [
     outlook.nextValue !== null ? `$${outlook.nextValue} ship value` : null,
     outlook.killsToNext !== null ? `${outlook.killsToNext} more kill${outlook.killsToNext === 1 ? "" : "s"}` : null,

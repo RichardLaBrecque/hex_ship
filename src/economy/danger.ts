@@ -19,19 +19,28 @@ export function dangerTier(run: Run, catalog: PartCatalog = PARTS, danger: Dange
   return Math.min(danger.levels.length, Math.max(byValue, notorietyTier(run.kills, danger)));
 }
 
+// Trips until the boss at top danger: 1 means the next launch meets it. Trips only count once they arrive.
+export const tripsToBoss = (run: Run, danger: Danger = DANGER): number => danger.boss.every - (run.topTrips % danger.boss.every);
+
+// The next launch flies at top danger and meets the boss.
+export const isBossTrip = (run: Run, catalog: PartCatalog = PARTS, danger: Danger = DANGER): boolean =>
+  dangerTier(run, catalog, danger) === danger.levels.length && tripsToBoss(run, danger) === 1;
+
 export type DangerOutlook = {
   tier: number;
   nextValue: number | null; // ship value that raises danger, if any
   killsToNext: number | null; // more kills that raise danger, if any
+  bossIn: number | null; // at top danger, trips until the boss (1 = the next one)
 };
 
-// What the station shows: the danger now and what would raise it.
+// What the station shows: the danger now and what would raise it, or at top danger, when the boss comes.
 export function dangerOutlook(run: Run, catalog: PartCatalog = PARTS, danger: Danger = DANGER): DangerOutlook {
   const tier = dangerTier(run, catalog, danger);
-  if (tier >= danger.levels.length) return { tier, nextValue: null, killsToNext: null };
+  if (tier >= danger.levels.length) return { tier, nextValue: null, killsToNext: null, bossIn: tripsToBoss(run, danger) };
   return {
     tier,
     nextValue: danger.valueCheckpoints[tier - 1] ?? null,
     killsToNext: tier * danger.killsPerTier - run.kills,
+    bossIn: null,
   };
 }

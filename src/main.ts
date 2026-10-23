@@ -65,7 +65,7 @@ function startTrip(docked: Run): void {
       sound,
       onArrive: (trip) => {
         sound.dock();
-        const { run, delivered, earned } = arrive(afterFlight(flying, trip));
+        const { run, delivered, earned } = arrive(flying, trip);
         const report = delivered.length > 0 ? `Delivered ${delivered.length} contract(s): +$${earned}` : "Arrived with an empty hold.";
         openStation(run, withBounty(report, trip.bounty));
       },

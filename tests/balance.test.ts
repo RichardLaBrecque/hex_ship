@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ECONOMY, PLANETS } from "../src/data/balance";
-import { DANGER, ENEMY_TIERS } from "../src/data/enemies";
+import { BOSS, bossTier, DANGER, ENEMY_TIERS } from "../src/data/enemies";
 import { BUILDABLE, PARTS } from "../src/data/parts";
 import { repairCost, sellValue } from "../src/economy/shop";
 import { hex } from "../src/hex/hex";
@@ -112,6 +112,29 @@ describe("balance", () => {
         expect(shipValue(ship)).toBeLessThanOrEqual(tier.budget.max);
       }
     });
+  });
+
+  // A ship just into top danger, and one far past it.
+  describe.each([3200, 8000])("bosses against a $%i ship", (playerValue) => {
+    const tier = bossTier(playerValue);
+    const bosses = Array.from({ length: 50 }, (_, i) => buildEnemy(tier, seeded(i + 1)));
+
+    it("are spaceworthy by the same rules as the player's ship", () => {
+      for (const ship of bosses) expect(validateShip(ship).problems).toEqual([]);
+    });
+
+    it("stay within 15% under valueShare of the player's ship and never go over", () => {
+      const budget = playerValue * DANGER.boss.valueShare;
+      for (const ship of bosses) {
+        expect(shipValue(ship)).toBeGreaterThanOrEqual(budget * 0.85);
+        expect(shipValue(ship)).toBeLessThanOrEqual(budget);
+      }
+    });
+  });
+
+  it("the boss outclasses the top regular enemy tier and aims better", () => {
+    expect(BOSS.aimError).toBeLessThan(ENEMY_TIERS[ENEMY_TIERS.length - 1].aimError);
+    expect(DANGER.valueCheckpoints[DANGER.valueCheckpoints.length - 1]).toBeGreaterThan(ENEMY_TIERS[ENEMY_TIERS.length - 1].budget.max);
   });
 
   it("each enemy tier costs more and aims better than the one below", () => {

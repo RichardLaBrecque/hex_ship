@@ -1,7 +1,7 @@
 import type { Sound } from "../audio/sound";
 import { COMBAT, ECONOMY, FLIGHT, PLANETS, type Planet } from "../data/balance";
-import { DANGER, ENCOUNTERS, ENEMY_TIERS, type Encounter } from "../data/enemies";
-import { dangerTier } from "../economy/danger";
+import { bossTier, DANGER, ENCOUNTERS, ENEMY_TIERS, type Encounter, type EnemyTier } from "../data/enemies";
+import { dangerTier, isBossTrip } from "../economy/danger";
 import { PARTS } from "../data/parts";
 import { cargoUnits } from "../economy/contracts";
 import { bountyFor, destination, type TripResult, type Run } from "../economy/run";
@@ -14,7 +14,7 @@ import { drawPart, drawShip } from "../render/drawShip";
 import { drawTouchControls, touchControlRects, type HeldControls, type TouchControls } from "../render/touchControls";
 import { drawText, pointInRect, THEME } from "../render/ui";
 import { repairShip } from "../ship/damage";
-import { engineFlame, type PlacedPart } from "../ship/ship";
+import { engineFlame, shipValue, type PlacedPart } from "../ship/ship";
 import { computeShipStats } from "../ship/stats";
 import { aiControls, type AiMode } from "../sim/ai";
 import { bounce, findContact, ramDamage } from "../sim/collision";
@@ -65,6 +65,7 @@ export class FlightScene implements Scene {
   private particles: Particle[] = [];
   private trauma = 0; // screen shake, 0..1
   private danger: number;
+  private bossTrip: boolean; // the encounters end with a boss (see isBossTrip)
   private encounters: Encounter[]; // still to come, in route order
   private bounty = 0;
   private kills = 0;
@@ -86,7 +87,8 @@ export class FlightScene implements Scene {
     this.to = PLANETS[destination(run)];
     this.fuel = run.fuel;
     this.danger = dangerTier(run);
-    this.encounters = [...DANGER.levels[this.danger - 1]];
+    this.bossTrip = isBossTrip(run);
+    this.encounters = [...(this.bossTrip ? DANGER.boss.encounters : DANGER.levels[this.danger - 1])];
 
     const heading = Math.atan2(this.to.y - this.from.y, this.to.x - this.from.x);
     const startDistance = this.from.radius + 80;
@@ -103,7 +105,7 @@ export class FlightScene implements Scene {
   }
 
   private trip(): TripResult {
-    return { fuel: this.fuel, ship: this.player.ship, bounty: this.bounty, kills: this.kills };
+    return { fuel: this.fuel, ship: this.player.ship, bounty: this.bounty, kills: this.kills, danger: this.danger };
   }
 
   exit(): void {
@@ -151,7 +153,9 @@ export class FlightScene implements Scene {
     this.options.sound.thrust(power);
 
     if (this.encounters.length > 0 && this.routeProgress() >= this.encounters[0].at) {
-      for (const tier of this.encounters.shift()!.enemies) this.spawnEnemy(tier);
+      const encounter = this.encounters.shift()!;
+      for (const level of encounter.enemies) this.spawnEnemy(ENEMY_TIERS[level - 1]);
+      if (encounter.boss) this.spawnEnemy(bossTier(shipValue(this.options.run.ship)));
     }
 
     this.stepWorld(dt);
@@ -171,9 +175,7 @@ export class FlightScene implements Scene {
     if (this.inDockZone() && speed(player.body) < FLIGHT.dockSpeed) this.options.onArrive(this.trip());
   }
 
-  // `level` is the enemy tier, starting at 1.
-  private spawnEnemy(level: number): void {
-    const tier = ENEMY_TIERS[level - 1];
+  private spawnEnemy(tier: EnemyTier): void {
     const ship = buildEnemy(tier, Math.random);
     const body = spawnBody(this.player.body, this.to, Math.random);
     const crew = computeShipStats(ship, 0).crewRequired; // enemies are always fully crewed
@@ -529,7 +531,10 @@ export class FlightScene implements Scene {
     drawText(ctx, `Hull ${Math.round(s.hull)} / ${Math.round(s.maxHull)}`, 20, 90, { color: THEME.muted });
     drawText(ctx, `Shield ${Math.round(this.player.shield)} / ${Math.round(s.shieldMax)}`, 20, 110, { color: THEME.muted });
     drawText(ctx, `Cargo ${cargoUnits(this.options.run.cargo)} / ${s.cargoCapacity} units`, 20, 130, { color: THEME.muted });
-    drawText(ctx, `Day ${this.options.run.day}  ·  $${this.options.run.money}  ·  Danger ${this.danger}`, 20, 150, { color: THEME.muted });
+    const boss = this.bossTrip ? "  ·  BOSS" : "";
+    drawText(ctx, `Day ${this.options.run.day}  ·  $${this.options.run.money}  ·  Danger ${this.danger}${boss}`, 20, 150, {
+      color: this.bossTrip ? THEME.bad : THEME.muted,
+    });
     drawText(ctx, `Bounties $${this.bounty} (${this.kills} kill${this.kills === 1 ? "" : "s"})`, 20, 170, {
       color: this.bounty > 0 ? THEME.good : THEME.muted,
     });

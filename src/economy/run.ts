@@ -22,6 +22,7 @@ export type Run = {
   readonly delivered: number; // contracts delivered this run: reputation
   readonly kills: number; // enemy ships destroyed this run: notoriety
   readonly valueTier: number; // ship-value danger tier as of the last launch (see danger.ts)
+  readonly topTrips: number; // trips that arrived after flying at top danger: every few is a boss trip (see danger.ts)
   // The score, kept as three separate columns.
   readonly peakShipValue: number; // the most the ship's parts were worth at any launch
   readonly cargoEarned: number; // total paid for delivered contracts
@@ -48,6 +49,7 @@ export function newRun(random: Random = Math.random, econ: Economy = ECONOMY): R
     delivered: 0,
     kills: 0,
     valueTier: 1,
+    topTrips: 0,
     peakShipValue: shipValue(ship),
     cargoEarned: 0,
     bountiesEarned: 0,
@@ -103,8 +105,8 @@ export function launch(run: Run, catalog: PartCatalog = PARTS, econ: Economy = E
 export const bountyFor = (enemy: Ship, catalog: PartCatalog = PARTS, econ: Economy = ECONOMY): number =>
   Math.round(shipValue(enemy, catalog) * econ.bountyShare);
 
-// What a flight changed, however it ended.
-export type TripResult = { fuel: number; ship: Ship; bounty: number; kills: number };
+// What a flight changed, however it ended, and the danger tier it flew at.
+export type TripResult = { fuel: number; ship: Ship; bounty: number; kills: number; danger: number };
 
 // Fuel burned, damage taken (lost parts are gone), bounties earned and kills made.
 export const afterFlight = (run: Run, trip: TripResult): Run => ({
@@ -121,15 +123,17 @@ export const towBack = (run: Run, econ: Economy = ECONOMY): Run => ({ ...run, fu
 
 export type Arrival = { run: Run; delivered: readonly Contract[]; earned: number };
 
-// Docking at the destination: get paid for cargo, a day passes, a new contract board.
+// Docking at the destination after `trip`: get paid for cargo, a day passes, a new contract board.
 // Every contract delivered adds to your reputation, which the new board already reflects.
-export function arrive(run: Run, random: Random = Math.random, econ: Economy = ECONOMY): Arrival {
+export function arrive(launched: Run, trip: TripResult, random: Random = Math.random, econ: Economy = ECONOMY, danger: Danger = DANGER): Arrival {
+  const run = afterFlight(launched, trip);
   const earned = expectedPay(run);
   const day = run.day + 1;
   const delivered = run.delivered + run.cargo.length;
   return {
     run: {
       ...run,
+      topTrips: run.topTrips + (trip.danger === danger.levels.length ? 1 : 0),
       money: run.money + earned,
       cargoEarned: run.cargoEarned + earned,
       day,

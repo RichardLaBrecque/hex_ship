@@ -61,8 +61,27 @@ export const ENEMY_TIERS: readonly EnemyTier[] = [
   },
 ];
 
-// One encounter: when it triggers along the route, and the tier (1-based) of each enemy in it.
-export type Encounter = { at: number; enemies: readonly number[] };
+// The boss on every few trips at top danger. Its budget is set from the player's ship (see bossTier).
+export const BOSS: EnemyTier = {
+  name: "Flagship",
+  budget: { min: 0, max: 0 },
+  core: [
+    { q: 0, r: 0, type: "bridge", rotation: 0 },
+    { q: -1, r: 0, type: "engine", rotation: 3 },
+    { q: -1, r: 1, type: "engine", rotation: 3 },
+    { q: 0, r: -1, type: "fuel", rotation: 0 },
+    { q: 0, r: 1, type: "crew", rotation: 0 },
+    { q: -1, r: -1, type: "shield", rotation: 0 },
+    { q: 1, r: 0, type: "cannon", rotation: 0 },
+    { q: 1, r: -1, type: "laser", rotation: 0 },
+    { q: 1, r: 1, type: "missile", rotation: 0 },
+  ],
+  extras: ["armor", "fuel", "crew", "shield", "cannon", "laser", "missile", "engine"],
+  aimError: 3,
+};
+
+// One encounter: when it triggers along the route, and the tier (1-based) of each enemy in it, plus the boss if `boss`.
+export type Encounter = { at: number; enemies: readonly number[]; boss?: boolean };
 
 // Danger tier = the higher of a ship-value tier and a notoriety (kills) tier.
 // Each danger tier sets the encounters on every trip.
@@ -91,6 +110,21 @@ export const DANGER = {
       { at: 0.75, enemies: [3, 3] },
     ],
   ] as readonly (readonly Encounter[])[],
+  // At top danger every `every`th trip (counting trips that arrived) is a boss trip, flying these encounters instead.
+  boss: {
+    every: 3,
+    valueShare: 0.8, // the boss's parts cost this share of the player's ship value
+    encounters: [
+      { at: 0.3, enemies: [3] },
+      { at: 0.7, enemies: [], boss: true },
+    ] as readonly Encounter[],
+  },
+};
+
+// The boss built to fight a player ship worth `shipValue`.
+export const bossTier = (shipValue: number, danger: Danger = DANGER): EnemyTier => {
+  const budget = shipValue * danger.boss.valueShare;
+  return { ...BOSS, budget: { min: budget, max: budget } };
 };
 
 export type Danger = typeof DANGER;

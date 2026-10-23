@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Economy } from "../src/data/balance";
 import { generateOffers, loadContract, reputation, unloadContract, type Contract } from "../src/economy/contracts";
 import { fireCrew, hireCrew, hiringFees } from "../src/economy/crew";
-import { afterFlight, arrive, bountyFor, launch, launchCost, launchProblems, towBack, type Outcome, type Run } from "../src/economy/run";
+import { afterFlight, arrive, bountyFor, launch, launchCost, launchProblems, towBack, type Outcome, type Run, type TripResult } from "../src/economy/run";
 import { buyPart, repairAll, repairCost, sellPart, sellValue } from "../src/economy/shop";
 import { hex } from "../src/hex/hex";
 import { partAt, placePart, type Ship } from "../src/ship/ship";
@@ -37,6 +37,11 @@ function testShip(): Ship {
 
 const CONTRACT = (id: string, units: number, payPerUnit = 10): Contract => ({ id, cargo: "ORE", units, payPerUnit, tier: 0 });
 
+// A trip at danger 1 that changed nothing: no fuel burned, no damage, no kills.
+const quietTrip = (run: Run): TripResult => ({ fuel: run.fuel, ship: run.ship, bounty: 0, kills: 0, danger: 1 });
+
+const NO_BOSS = { every: 3, valueShare: 1, encounters: [] };
+
 function testRun(overrides: Partial<Run> = {}): Run {
   return {
     money: 1000,
@@ -51,6 +56,7 @@ function testRun(overrides: Partial<Run> = {}): Run {
     delivered: 0,
     kills: 0,
     valueTier: 1,
+    topTrips: 0,
     peakShipValue: 0,
     cargoEarned: 0,
     bountiesEarned: 0,
@@ -169,7 +175,7 @@ describe("bountyFor", () => {
 describe("afterFlight", () => {
   it("keeps the fuel left and the damage taken, pays the bounties and counts the kills", () => {
     const ship = placePart(new Map(), hex(0, 0), "bridge", 0, TEST_PARTS);
-    const run = afterFlight(testRun({ kills: 9, bountiesEarned: 9 }), { fuel: 9, ship, bounty: 99, kills: 2 });
+    const run = afterFlight(testRun({ kills: 9, bountiesEarned: 9 }), { fuel: 9, ship, bounty: 99, kills: 2, danger: 1 });
     expect(run.fuel).toBe(9);
     expect(run.ship).toBe(ship);
     expect(run.money).toBe(1099);
@@ -288,7 +294,7 @@ describe("launch", () => {
 
   it("sets the ship-value danger tier from the ship launched", () => {
     // $130 of parts passes a $100 checkpoint
-    const danger = { valueCheckpoints: [100], dropBuffer: 0, killsPerTier: 9, levels: [[], []] };
+    const danger = { valueCheckpoints: [100], dropBuffer: 0, killsPerTier: 9, levels: [[], []], boss: NO_BOSS };
     expect(ok(launch(testRun({ valueTier: 1 }), TEST_PARTS, TEST_ECONOMY, danger)).valueTier).toBe(2);
   });
 
@@ -351,7 +357,7 @@ describe("towBack", () => {
 describe("arrive", () => {
   it("pays for delivered cargo, moves a day on and docks at the other planet", () => {
     const run = testRun({ cargo: [CONTRACT("A", 4, 10), CONTRACT("B", 2, 25)], offers: [CONTRACT("OLD", 1)] });
-    const result = arrive(run, sequence(0), TEST_ECONOMY);
+    const result = arrive(run, quietTrip(run), sequence(0), TEST_ECONOMY);
     expect(result.earned).toBe(90);
     expect(result.delivered.map((c) => c.id)).toEqual(["A", "B"]);
     expect(result.run.money).toBe(1090);
@@ -363,11 +369,31 @@ describe("arrive", () => {
 
   it("adds every delivered contract to your reputation", () => {
     const run = testRun({ delivered: 4, cargo: [CONTRACT("A", 1), CONTRACT("B", 1)] });
-    expect(arrive(run, sequence(0), TEST_ECONOMY).run.delivered).toBe(6);
+    expect(arrive(run, quietTrip(run), sequence(0), TEST_ECONOMY).run.delivered).toBe(6);
   });
 
   it("adds the pay to the cargo sold score", () => {
     const run = testRun({ cargoEarned: 9, cargo: [CONTRACT("A", 4, 10)] });
-    expect(arrive(run, sequence(0), TEST_ECONOMY).run.cargoEarned).toBe(49);
+    expect(arrive(run, quietTrip(run), sequence(0), TEST_ECONOMY).run.cargoEarned).toBe(49);
+  });
+
+  it("counts a trip flown at top danger toward the boss", () => {
+    const danger = { valueCheckpoints: [100], dropBuffer: 0, killsPerTier: 9, levels: [[], []], boss: NO_BOSS };
+    const run = testRun({ topTrips: 4 });
+    expect(arrive(run, { ...quietTrip(run), danger: 2 }, sequence(0), TEST_ECONOMY, danger).run.topTrips).toBe(5);
+  });
+
+  it("doesn't count a trip flown below top danger", () => {
+    const danger = { valueCheckpoints: [100], dropBuffer: 0, killsPerTier: 9, levels: [[], []], boss: NO_BOSS };
+    const run = testRun({ topTrips: 4 });
+    expect(arrive(run, { ...quietTrip(run), danger: 1 }, sequence(0), TEST_ECONOMY, danger).run.topTrips).toBe(4);
+  });
+
+  it("keeps what the flight changed", () => {
+    const run = testRun({ kills: 9 });
+    const result = arrive(run, { ...quietTrip(run), fuel: 9, bounty: 99, kills: 2 }, sequence(0), TEST_ECONOMY);
+    expect(result.run.fuel).toBe(9);
+    expect(result.run.money).toBe(1099);
+    expect(result.run.kills).toBe(11);
   });
 });

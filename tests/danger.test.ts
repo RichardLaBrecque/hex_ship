@@ -1,17 +1,18 @@
 import { describe, expect, it } from "vitest";
-import type { Danger } from "../src/data/enemies";
-import { dangerOutlook, dangerTier, notorietyTier, valueTier } from "../src/economy/danger";
+import { bossTier, type Danger } from "../src/data/enemies";
+import { dangerOutlook, dangerTier, isBossTrip, notorietyTier, valueTier } from "../src/economy/danger";
 import type { Run } from "../src/economy/run";
 import { hex } from "../src/hex/hex";
 import { placePart, type Ship } from "../src/ship/ship";
 import { TEST_PARTS } from "./catalog";
 
-// checkpoints at $100 and $200 for danger 2 and 3; three levels in all
+// checkpoints at $100 and $200 for danger 2 and 3; three levels in all; a boss every 3rd trip at danger 3
 const TEST_DANGER: Danger = {
   valueCheckpoints: [100, 200],
   dropBuffer: 20,
   killsPerTier: 5,
   levels: [[], [], []],
+  boss: { every: 3, valueShare: 0.5, encounters: [] },
 };
 
 // a bridge ($0) plus some $100 engines
@@ -34,6 +35,7 @@ const run = (overrides: Partial<Run>): Run => ({
   delivered: 0,
   kills: 0,
   valueTier: 1,
+  topTrips: 0,
   peakShipValue: 0,
   cargoEarned: 0,
   bountiesEarned: 0,
@@ -83,10 +85,33 @@ describe("dangerTier", () => {
 
 describe("dangerOutlook", () => {
   it("shows the next checkpoint and the kills still needed", () => {
-    expect(dangerOutlook(run({ kills: 3 }), TEST_PARTS, TEST_DANGER)).toEqual({ tier: 1, nextValue: 100, killsToNext: 2 });
+    expect(dangerOutlook(run({ kills: 3 }), TEST_PARTS, TEST_DANGER)).toEqual({ tier: 1, nextValue: 100, killsToNext: 2, bossIn: null });
   });
 
-  it("has nothing left to reach at the top level", () => {
-    expect(dangerOutlook(run({ ship: shipWorth(2) }), TEST_PARTS, TEST_DANGER)).toEqual({ tier: 3, nextValue: null, killsToNext: null });
+  it("counts down to the boss at the top level", () => {
+    expect(dangerOutlook(run({ ship: shipWorth(2), topTrips: 4 }), TEST_PARTS, TEST_DANGER)).toEqual({
+      tier: 3,
+      nextValue: null,
+      killsToNext: null,
+      bossIn: 2,
+    });
+  });
+});
+
+describe("isBossTrip", () => {
+  it("is every 3rd trip at the top level: after 2, 5, 8 trips have arrived", () => {
+    const bossTrips = [0, 1, 2, 3, 4, 5, 6, 7, 8].filter((topTrips) => isBossTrip(run({ ship: shipWorth(2), topTrips }), TEST_PARTS, TEST_DANGER));
+    expect(bossTrips).toEqual([2, 5, 8]);
+  });
+
+  it("is never below the top level", () => {
+    expect(isBossTrip(run({ ship: shipWorth(1), topTrips: 2 }), TEST_PARTS, TEST_DANGER)).toBe(false);
+  });
+});
+
+describe("bossTier", () => {
+  it("costs valueShare of the player's ship value", () => {
+    // valueShare 0.5 on a $1000 ship
+    expect(bossTier(1000, TEST_DANGER).budget).toEqual({ min: 500, max: 500 });
   });
 });
