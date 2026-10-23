@@ -67,7 +67,7 @@ export type Encounter = { at: number; enemies: readonly number[] };
 // Danger tier = the higher of a ship-value tier and a notoriety (kills) tier.
 // Each danger tier sets the encounters on every trip.
 export const DANGER = {
-  valueCheckpoints: [700, 1200, 2000], // ship value at launch for danger 2, 3 and 4
+  valueCheckpoints: [700, 1200, 2000, 3200], // ship value at launch for danger 2, 3, 4 and 5
   dropBuffer: 100, // ship value must fall this far under a checkpoint before danger drops back
   killsPerTier: 8, // every this many kills adds a notoriety tier
   levels: [
@@ -84,6 +84,11 @@ export const DANGER = {
       { at: 0.25, enemies: [2] },
       { at: 0.5, enemies: [2, 2] },
       { at: 0.75, enemies: [3] },
+    ],
+    [
+      { at: 0.25, enemies: [3] },
+      { at: 0.5, enemies: [2, 3] },
+      { at: 0.75, enemies: [3, 3] },
     ],
   ] as readonly (readonly Encounter[])[],
 };
