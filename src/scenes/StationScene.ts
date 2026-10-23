@@ -61,6 +61,8 @@ export class StationScene implements Scene {
   // The part type being built with, or null for inspect mode (click a placed part to select it).
   private tool: PartId | null = null;
   private inspected: Hex | null = null;
+  // On touch, building takes two taps: the first puts a ghost of the part here, the second buys it.
+  private pending: Hex | null = null;
   private rotations: Record<PartId, number> = {
     bridge: 0,
     engine: 3,
@@ -94,6 +96,7 @@ export class StationScene implements Scene {
   private rotateLeftButton = NO_RECT;
   private rotateRightButton = NO_RECT;
   private sellButton = NO_RECT;
+  private placeButton = NO_RECT;
   private doneButton = NO_RECT;
   private tabButtons: Rect[] = [];
 
@@ -140,12 +143,20 @@ export class StationScene implements Scene {
   private pickTool(id: PartId): void {
     this.tool = this.tool === id ? null : id;
     this.inspected = null;
+    this.pending = null;
   }
 
   // Puts the tool away, or lets go of the selected part.
   private deselect(): void {
     this.tool = null;
     this.inspected = null;
+    this.pending = null;
+  }
+
+  private buyAt(h: Hex): void {
+    if (!this.tool) return;
+    this.apply(buyPart(this.run, h, this.tool, this.rotations[this.tool]));
+    this.pending = null;
   }
 
   // Turns the tool's next part, or the selected part, one step clockwise (step 1) or anticlockwise (step -1).
@@ -209,6 +220,10 @@ export class StationScene implements Scene {
       this.sellInspected();
       return;
     }
+    if (pointInRect(this.mouse, this.placeButton)) {
+      if (this.pending) this.buyAt(this.pending);
+      return;
+    }
     if (pointInRect(this.mouse, this.doneButton)) {
       this.deselect();
       return;
@@ -218,7 +233,14 @@ export class StationScene implements Scene {
       if (this.inspected) this.tab = "parts";
       return;
     }
-    if (this.hovered) this.apply(buyPart(this.run, this.hovered, this.tool, this.rotations[this.tool]));
+    if (!this.hovered) return;
+    if (!this.touch) {
+      this.buyAt(this.hovered);
+    } else if (this.pending && hexKey(this.pending) === hexKey(this.hovered)) {
+      this.buyAt(this.pending);
+    } else {
+      this.pending = this.hovered;
+    }
   }
 
   // Turning a part is free.
@@ -275,7 +297,7 @@ export class StationScene implements Scene {
     this.contractCards = [];
     this.tabButtons = [];
     this.hireButton = this.fireButton = this.repairButton = this.refuelButton = this.launchButton = NO_RECT;
-    this.rotateLeftButton = this.rotateRightButton = this.sellButton = this.doneButton = NO_RECT;
+    this.rotateLeftButton = this.rotateRightButton = this.sellButton = this.placeButton = this.doneButton = NO_RECT;
 
     if (this.touch) {
       this.renderTouch(ctx, width, height);
@@ -461,7 +483,8 @@ export class StationScene implements Scene {
     }
 
     if (this.tool) {
-      if (this.hovered) this.renderGhost(ctx, this.tool, this.hovered);
+      const ghost = this.touch ? this.pending : this.hovered;
+      if (ghost) this.renderGhost(ctx, this.tool, ghost);
       return;
     }
     const hoveredPart = this.hovered ? partAt(this.run.ship, this.hovered) : undefined;
@@ -756,13 +779,20 @@ export class StationScene implements Scene {
     const gap = 8;
     const width = (row.w - gap * 3) / 4;
     const at = (i: number): Rect => ({ x: row.x + i * (width + gap), y: row.y, w: width, h: row.h });
-    [this.rotateLeftButton, this.rotateRightButton, this.sellButton, this.doneButton] = [at(0), at(1), at(2), at(3)];
+    [this.rotateLeftButton, this.rotateRightButton, this.doneButton] = [at(0), at(1), at(3)];
     const canRotate = usesRotation(active);
-    const canSell = !this.tool && inspected !== undefined && inspected.type !== "bridge";
     const roomy = width >= ACTION_WIDTH;
     this.smallButton(ctx, this.rotateLeftButton, roomy ? "↺ Rotate" : "↺", canRotate);
     this.smallButton(ctx, this.rotateRightButton, roomy ? "Rotate ↻" : "↻", canRotate);
-    this.smallButton(ctx, this.sellButton, inspected && canSell ? `Sell $${sellValue(inspected)}` : "Sell", canSell);
+    // Building on touch buys at the ghost; otherwise the third button sells the selected part.
+    if (this.tool && this.touch) {
+      this.placeButton = at(2);
+      this.smallButton(ctx, this.placeButton, `Place $${PARTS[this.tool].cost}`, this.pending !== null);
+    } else {
+      this.sellButton = at(2);
+      const canSell = !this.tool && inspected !== undefined && inspected.type !== "bridge";
+      this.smallButton(ctx, this.sellButton, inspected && canSell ? `Sell $${sellValue(inspected)}` : "Sell", canSell);
+    }
     this.smallButton(ctx, this.doneButton, "Done", true);
   }
 

@@ -40,9 +40,10 @@ back to it.
 | Flight   | `Esc`                     | Turn back                             |
 | Anywhere | `M` or the speaker button | Mute                                  |
 
-**On a phone or tablet,** hold it sideways. Tap to do anything you'd click. In the station, the Rotate, Sell and
-Done buttons under the grid stand in for the keys. In flight, the buttons in the bottom corners turn, thrust and
-brake, and you can hold two at once.
+**On a phone or tablet,** hold it sideways. The station has its own touch layout: the ship's grid on the left and
+tabs on the right. To build, tap a part in the Parts tab, then tap a hex to see the part there. Rotate it if you
+need to, then tap the hex again (or Place) to buy it. Tap a part on your ship to select it, rotate it or sell it. In
+flight, the buttons in the bottom corners turn, thrust and brake, and you can hold two at once.
 
 ## Tech stack
 
