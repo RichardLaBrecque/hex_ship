@@ -7,7 +7,8 @@ import { computeShipStats } from "../ship/stats";
 import { validateShip } from "../ship/validate";
 import { thrustSpin, type Body } from "./physics";
 
-const BUILD_ATTEMPTS = 60;
+const BUILD_ATTEMPTS = 60; // at least; bigger budgets get one more try per BUDGET_PER_ATTEMPT
+const BUDGET_PER_ATTEMPT = 30;
 const MAX_DRIFT_TURN = (10 * Math.PI) / 180; // radians/s an enemy may drift-turn under thrust or braking, so the AI can still aim
 
 export type Encounters = typeof ENCOUNTERS;
@@ -19,7 +20,8 @@ export function buildEnemy(tier: EnemyTier, random: Random, catalog: PartCatalog
   for (const p of tier.core) ship = placePart(ship, hex(p.q, p.r), p.type, p.rotation, catalog);
 
   const budget = tier.budget.min + random() * (tier.budget.max - tier.budget.min);
-  for (let i = 0; i < BUILD_ATTEMPTS && tier.extras.length > 0; i++) {
+  const attempts = Math.max(BUILD_ATTEMPTS, budget / BUDGET_PER_ATTEMPT);
+  for (let i = 0; i < attempts && tier.extras.length > 0; i++) {
     const type = tier.extras[Math.floor(random() * tier.extras.length)];
     if (shipValue(ship, catalog) + catalog[type].cost > budget) continue;
     const spots = openHexes(ship);
