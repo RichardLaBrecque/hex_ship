@@ -8,7 +8,7 @@ export const FLIGHT = {
   gyroResponse: 4, // per second: how hard the gyro corrects spin; higher snaps to the asked-for turn faster and resists engine twist more
   torqueScale: 1, // how strongly off-centre engines twist the ship; 0 turns the effect off
   spinDrag: 1, // per second; slows spin on its own, so a ship that overpowers its gyro spins steadily instead of ever faster
-  drag: 0.3, // per second; lower is slidier. Top speed ≈ acceleration × thrustScale / drag
+  drag: 0.14, // per second; lower is slidier. A coasting ship halves its speed every ln 2 / drag ≈ 5 s. Top speed ≈ acceleration × thrustScale / drag
   dockSpeed: 80, // must be slower than this (pixels/s) to dock
 };
 
