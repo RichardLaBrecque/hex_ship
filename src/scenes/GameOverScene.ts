@@ -4,8 +4,11 @@ import type { Scene } from "../engine/scene";
 import { drawButton, drawText, pointInRect, THEME, type Rect } from "../render/ui";
 import type { NewBests, Records } from "../save/records";
 
+export type RunEnd = "destroyed" | "ended"; // the core was lost, or the player ended the run at a station
+
 export type GameOverOptions = {
-  run: Run; // the run as it stood at launch
+  run: Run; // the run as it stood at launch, or at the station where it was ended
+  reason: RunEnd;
   records: Records; // already including this run
   newBests: NewBests;
   onRestart: () => void;
@@ -24,12 +27,14 @@ export class GameOverScene implements Scene {
   }
 
   render(ctx: CanvasRenderingContext2D, width: number, height: number): void {
-    const { run, records, newBests } = this.options;
+    const { run, reason, records, newBests } = this.options;
     ctx.fillStyle = THEME.background;
     ctx.fillRect(0, 0, width, height);
     const top = height / 2 - 170;
-    drawText(ctx, "GAME OVER", width / 2, top, { align: "center", size: 40, bold: true, color: THEME.bad });
-    drawText(ctx, `Your ship's core was destroyed on day ${run.day}.`, width / 2, top + 46, { align: "center", size: 16 });
+    const destroyed = reason === "destroyed";
+    drawText(ctx, destroyed ? "GAME OVER" : "RUN ENDED", width / 2, top, { align: "center", size: 40, bold: true, color: destroyed ? THEME.bad : THEME.warn });
+    const summary = destroyed ? `Your ship's core was destroyed on day ${run.day}.` : `You ended the run on day ${run.day}.`;
+    drawText(ctx, summary, width / 2, top + 46, { align: "center", size: 16 });
 
     const columns = [
       { label: "PEAK SHIP VALUE", value: run.peakShipValue, best: records.best.peakShipValue, isNew: newBests.peakShipValue },

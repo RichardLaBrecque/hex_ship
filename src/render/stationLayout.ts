@@ -9,6 +9,7 @@ const TAB_HEIGHT = 34;
 const LAUNCH_HEIGHT = 38;
 const GAP = 4;
 const MUTE_SIZE = 28;
+const END_RUN_WIDTH = 48;
 
 // A radius-5 hex grid of pointy-top hexes is 17 sizes tall and 19 wide.
 const GRID_HEIGHT_IN_SIZES = 17;
@@ -23,6 +24,7 @@ export type TouchStationLayout = {
   panel: Rect;
   status: Rect; // docked at, day and money
   mute: Rect; // at the right end of the status line
+  endRun: Rect; // just left of the mute button
   tabs: Rect[]; // in STATION_TABS order
   body: Rect; // the chosen tab's content
   launch: Rect;
@@ -38,8 +40,9 @@ export function touchStationLayout(width: number, height: number): TouchStationL
 
   const panelX = grid.x + grid.w + MARGIN;
   const panel = { x: panelX, y: MARGIN, w: width - panelX - MARGIN, h: height - 2 * MARGIN };
-  const status = { x: panel.x, y: panel.y, w: panel.w - MUTE_SIZE - MARGIN, h: STATUS_HEIGHT };
   const mute = { x: panel.x + panel.w - MUTE_SIZE, y: panel.y, w: MUTE_SIZE, h: MUTE_SIZE };
+  const endRun = { x: mute.x - MARGIN - END_RUN_WIDTH, y: panel.y, w: END_RUN_WIDTH, h: MUTE_SIZE };
+  const status = { x: panel.x, y: panel.y, w: endRun.x - MARGIN - panel.x, h: STATUS_HEIGHT };
 
   const tabsY = status.y + status.h + GAP;
   const tabWidth = panel.w / STATION_TABS.length;
@@ -49,5 +52,5 @@ export function touchStationLayout(width: number, height: number): TouchStationL
   const bodyY = tabsY + TAB_HEIGHT + GAP;
   const body = { x: panel.x, y: bodyY, w: panel.w, h: launch.y - GAP - bodyY };
 
-  return { hexSize, grid, panel, status, mute, tabs, body, launch };
+  return { hexSize, grid, panel, status, mute, endRun, tabs, body, launch };
 }

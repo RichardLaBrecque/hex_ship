@@ -5,7 +5,7 @@ import { startLoop } from "./engine/loop";
 import { SceneManager } from "./engine/scene";
 import { fitView } from "./engine/view";
 import { FlightScene } from "./scenes/FlightScene";
-import { GameOverScene } from "./scenes/GameOverScene";
+import { GameOverScene, type RunEnd } from "./scenes/GameOverScene";
 import { StationScene } from "./scenes/StationScene";
 import { drawMuteButton, muteButtonRect } from "./render/muteButton";
 import { drawText, pointInRect, THEME, type Rect } from "./render/ui";
@@ -47,7 +47,9 @@ resize();
 // The run is saved at every station change, so a reload picks up where you left off.
 function openStation(run: Run, report?: string): void {
   saveRun(run);
-  scenes.switchTo(new StationScene({ run, report, onLaunch: (docked) => startTrip(docked), onChange: saveRun }));
+  scenes.switchTo(
+    new StationScene({ run, report, onLaunch: (docked) => startTrip(docked), onChange: saveRun, onEndRun: (docked) => endRun(docked, "ended") }),
+  );
 }
 
 // Launch costs are paid up front; turning back (Esc) doesn't refund them.
@@ -71,17 +73,17 @@ function startTrip(docked: Run): void {
         trip.fuel > 0
           ? openStation(afterFlight(flying, trip), withBounty("Turned back. Wages aren't refunded.", trip.bounty))
           : openStation(towBack(afterFlight(flying, trip)), withBounty("Towed back on an empty tank.", trip.bounty)),
-      onDestroyed: () => endRun(flying),
+      onDestroyed: () => endRun(flying, "destroyed"),
     }),
   );
 }
 
-// The core is lost: the save goes and the score joins the records.
-function endRun(run: Run): void {
+// The core is lost, or the player ended the run at a station: the save goes and the score joins the records.
+function endRun(run: Run, reason: RunEnd): void {
   clearRun();
   const { records, newBests } = addScore(loadRecords(), scoreOf(run));
   saveRecords(records);
-  scenes.switchTo(new GameOverScene({ run, records, newBests, onRestart: () => openStation(newRun()) }));
+  scenes.switchTo(new GameOverScene({ run, reason, records, newBests, onRestart: () => openStation(newRun()) }));
 }
 
 // The game is laid out for landscape. A phone held upright pauses behind a note until it's turned.

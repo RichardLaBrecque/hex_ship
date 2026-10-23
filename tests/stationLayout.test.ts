@@ -15,7 +15,7 @@ describe("touchStationLayout", () => {
   ]) {
     it(`keeps every area on screen and apart at ${width}×${height}`, () => {
       const layout = touchStationLayout(width, height);
-      const rects = [layout.grid, layout.status, layout.mute, ...layout.tabs, layout.body, layout.launch];
+      const rects = [layout.grid, layout.status, layout.mute, layout.endRun, ...layout.tabs, layout.body, layout.launch];
       for (const r of rects) expect(onScreen(r, width, height)).toBe(true);
       for (const [i, a] of rects.entries()) {
         for (const b of rects.slice(i + 1)) expect(overlaps(a, b)).toBe(false);

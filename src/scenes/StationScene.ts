@@ -11,6 +11,7 @@ import type { Scene } from "../engine/scene";
 import { DEFAULT_MIN_VIEW, type Size } from "../engine/view";
 import { hexesInRadius, hexKey, hexToPixel, mod6, neighbor, pixelToHex, type Hex, type Point } from "../hex/hex";
 import { drawHex } from "../render/drawHex";
+import { muteButtonRect } from "../render/muteButton";
 import { drawFiringArc, drawPart, drawShip } from "../render/drawShip";
 import { STATION_TABS, touchStationLayout, type StationTab } from "../render/stationLayout";
 import { drawButton, drawPanel, drawText, pointInRect, THEME, wrapText, type Rect, type TextStyle } from "../render/ui";
@@ -29,6 +30,7 @@ const TOP_BAR = 64;
 const BOARD_HEIGHT = 128;
 const ACTION_BAR = 36; // under the grid: rotate, sell and done buttons for players without a keyboard
 const ACTION_WIDTH = 84;
+const END_RUN_WIDTH = 72;
 const MESSAGE_SECONDS = 2.5;
 const REPORT_SECONDS = 6;
 
@@ -46,6 +48,7 @@ export type StationOptions = {
   report?: string; // shown on arrival, e.g. what the last trip earned
   onLaunch: (run: Run) => void;
   onChange: (run: Run) => void; // after every purchase, sale, hire, contract or rotation
+  onEndRun: (run: Run) => void; // the player gave up on this run to start a new one
 };
 
 // Docked at a planet: build and trade parts, manage crew, repair, pick contracts, launch.
@@ -82,6 +85,7 @@ export class StationScene implements Scene {
   private messageTimer = 0;
   private touch = false; // the player is on a touch screen, so the station uses its touch layout
   private tab: StationTab = "parts"; // the touch layout's open tab
+  private confirmingEnd = false; // End run was pressed once; pressing it again ends the run
 
   // Layout, recalculated every render from the canvas size.
   private hexSize = MAX_HEX_SIZE;
@@ -98,6 +102,7 @@ export class StationScene implements Scene {
   private sellButton = NO_RECT;
   private placeButton = NO_RECT;
   private doneButton = NO_RECT;
+  private endRunButton = NO_RECT;
   private tabButtons: Rect[] = [];
 
   constructor(private options: StationOptions) {
@@ -127,7 +132,10 @@ export class StationScene implements Scene {
     BUILDABLE.forEach((id, i) => {
       if (input.wasPressed(HOTKEYS[i])) this.pickTool(id);
     });
-    if (input.wasPressed("Escape")) this.deselect();
+    if (input.wasPressed("Escape")) {
+      this.deselect();
+      this.confirmingEnd = false;
+    }
     if (input.wasPressed("KeyR")) this.rotate(input.isDown("ShiftLeft") || input.isDown("ShiftRight") ? -1 : 1);
     if (input.wasPressed("Delete") || input.wasPressed("Backspace")) this.sellInspected();
 
@@ -173,6 +181,20 @@ export class StationScene implements Scene {
   }
 
   private handleLeftClick(): void {
+    // Ending a run takes two presses; a click anywhere else calls it off.
+    if (pointInRect(this.mouse, this.endRunButton)) {
+      if (this.confirmingEnd) {
+        this.options.onEndRun(this.run);
+      } else {
+        this.confirmingEnd = true;
+        this.flash(`${this.touch ? "Tap End" : "Press End run"} again to give up this run and start a new one. Your score is recorded.`, THEME.warn, REPORT_SECONDS);
+      }
+      return;
+    }
+    if (this.confirmingEnd) {
+      this.confirmingEnd = false;
+      this.messageTimer = 0;
+    }
     const tab = this.tabButtons.findIndex((r) => pointInRect(this.mouse, r));
     if (tab >= 0) {
       this.tab = STATION_TABS[tab];
@@ -298,6 +320,7 @@ export class StationScene implements Scene {
     this.tabButtons = [];
     this.hireButton = this.fireButton = this.repairButton = this.refuelButton = this.launchButton = NO_RECT;
     this.rotateLeftButton = this.rotateRightButton = this.sellButton = this.placeButton = this.doneButton = NO_RECT;
+    this.endRunButton = NO_RECT;
 
     if (this.touch) {
       this.renderTouch(ctx, width, height);
@@ -390,6 +413,8 @@ export class StationScene implements Scene {
         break;
     }
 
+    this.endRunButton = layout.endRun;
+    this.renderEndRunButton(ctx, "End");
     this.launchButton = layout.launch;
     this.renderLaunchButton(ctx);
   }
@@ -622,6 +647,10 @@ export class StationScene implements Scene {
     drawPanel(ctx, panel);
 
     this.launchButton = { x: column.left, y: panel.y + panel.h - 58, w: column.right - column.left, h: 44 };
+    // Next to the mute button, which sits in this panel's top-right corner.
+    const mute = muteButtonRect(width);
+    this.endRunButton = { x: mute.x - 8 - END_RUN_WIDTH, y: mute.y + 2, w: END_RUN_WIDTH, h: mute.h - 4 };
+    this.renderEndRunButton(ctx, "End run");
     const shipBottom = this.renderShipSection(ctx, column, panel.y + 22);
     const suppliesBottom = this.renderSuppliesSection(ctx, column, shipBottom + 14);
     this.renderTripSection(ctx, column, suppliesBottom + 16, this.launchButton.y - 12);
@@ -769,6 +798,19 @@ export class StationScene implements Scene {
       enabled: this.problems.length === 0,
       hovered: pointInRect(this.mouse, this.launchButton),
     });
+  }
+
+  // Turns red and asks to be pressed again once it has been pressed once.
+  private renderEndRunButton(ctx: CanvasRenderingContext2D, label: string): void {
+    const r = this.endRunButton;
+    const hovered = pointInRect(this.mouse, r);
+    ctx.fillStyle = this.confirmingEnd ? "#4a1c22" : hovered ? "#1e2c48" : THEME.panel;
+    ctx.fillRect(r.x, r.y, r.w, r.h);
+    ctx.strokeStyle = this.confirmingEnd ? THEME.bad : THEME.panelBorder;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1);
+    const text = this.confirmingEnd ? "Sure?" : label;
+    drawText(ctx, text, r.x + r.w / 2, r.y + r.h / 2, { align: "center", size: 12, bold: this.confirmingEnd, color: this.confirmingEnd ? THEME.bad : THEME.muted });
   }
 
   // The keyboard's R, Shift+R, Del and Esc as four buttons across `row`, shown while building or with a part selected.
