@@ -19,6 +19,9 @@ export const COMBAT = {
   debrisLife: 4, // seconds a broken-off part drifts before fading out
   debrisSpeed: 40, // pixels/s of random drift added to broken-off parts
   wreckDelay: 2, // seconds between losing the core and the Game Over screen
+  ramBounce: 0.4, // share of the closing speed ships keep when they bounce apart; 0 sticks together, 1 is fully elastic
+  ramSafeSpeed: 60, // pixels/s; ships closing slower than this bump without damage
+  ramDamage: 0.12, // damage to each of the two parts that struck, per pixel/s of closing speed above ramSafeSpeed
 };
 
 export type Combat = typeof COMBAT;

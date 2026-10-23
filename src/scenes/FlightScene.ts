@@ -17,6 +17,7 @@ import { repairShip } from "../ship/damage";
 import { engineFlame, type PlacedPart } from "../ship/ship";
 import { computeShipStats } from "../ship/stats";
 import { aiControls, type AiMode } from "../sim/ai";
+import { bounce, findContact, ramDamage } from "../sim/collision";
 import { burnFuel } from "../sim/fuel";
 import { activeThrust, speed, stepBody, type Body } from "../sim/physics";
 import { buildEnemy, spawnBody } from "../sim/spawner";
@@ -193,6 +194,8 @@ export class FlightScene implements Scene {
       enemy.thrust = controls.thrust;
       v.body = stepBody(v.body, controls, v.stats, dt);
     }
+    const enemies = this.enemies.map((e) => e.vessel);
+    this.collide(alive ? [player, ...enemies] : enemies);
     this.enemies = this.enemies.filter(
       (e) => e.mode !== "flee" || distance(e.vessel.body, player.body) < ENCOUNTERS.despawnDistance,
     );
@@ -285,6 +288,20 @@ export class FlightScene implements Scene {
     v.shield = Math.min(v.stats.shieldMax, v.shield + v.stats.shieldRegen * dt);
     const repaired = repairShip(v.ship, v.stats.repair * dt);
     if (repaired !== v.ship) setShip(v, repaired);
+  }
+
+  // Ships that touch bounce apart, and a hard enough hit damages the part on each side that struck.
+  private collide(vessels: readonly Vessel[]): void {
+    for (const [i, a] of vessels.entries()) {
+      for (const b of vessels.slice(i + 1)) {
+        const contact = findContact(a, b);
+        if (!contact) continue;
+        const damage = ramDamage(bounce(a, b, contact));
+        if (damage <= 0) continue;
+        this.hit(a, contact.aKey, damage, contact.point);
+        this.hit(b, contact.bKey, damage, contact.point);
+      }
+    }
   }
 
   // `at` is where the shot landed, for sparks and sound.
