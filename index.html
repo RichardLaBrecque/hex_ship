@@ -2,11 +2,13 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>Hex Ship</title>
     <style>
       html, body { margin: 0; height: 100%; background: #0b0f1a; overflow: hidden; }
-      canvas { display: block; width: 100vw; height: 100vh; }
+      canvas { display: block; width: 100vw; height: 100vh; height: 100dvh; }
+      /* Taps and drags are for the game: no scrolling, zooming, text selection or long-press menus. */
+      canvas { touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
     </style>
   </head>
   <body>
