@@ -24,15 +24,21 @@ window.addEventListener("pointerdown", () => sound.unlock());
 let width = 0;
 let height = 0;
 
-// Size the backing store for the device pixel ratio but draw in logical pixels (see fitView).
+// Size the backing store for the device pixel ratio.
 function resize(): void {
   const dpr = window.devicePixelRatio || 1;
-  const view = fitView(window.innerWidth, window.innerHeight);
+  canvas.width = Math.floor(window.innerWidth * dpr);
+  canvas.height = Math.floor(window.innerHeight * dpr);
+  fitScene();
+}
+
+// Draw in the current scene's logical pixels (see fitView). Each scene can ask for its own minimum size.
+function fitScene(): void {
+  const dpr = window.devicePixelRatio || 1;
+  const view = fitView(window.innerWidth, window.innerHeight, scenes.scene?.minView?.(input.usingTouch));
   width = view.width;
   height = view.height;
   input.scale = view.scale;
-  canvas.width = Math.floor(window.innerWidth * dpr);
-  canvas.height = Math.floor(window.innerHeight * dpr);
   ctx.setTransform(dpr * view.scale, 0, 0, dpr * view.scale, 0, 0);
 }
 window.addEventListener("resize", resize);
@@ -108,6 +114,7 @@ startLoop(
     input.endFrame();
   },
   () => {
+    fitScene();
     if (isUpright()) {
       drawTurnSideways();
       return;

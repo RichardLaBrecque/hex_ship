@@ -14,6 +14,14 @@ describe("fitView", () => {
     expect(view.width).toBeCloseTo(1471.6, 1);
   });
 
+  it("scales down to a scene's own minimum instead", () => {
+    // 360 / 400 = 0.9, so 844 css px become ≈ 937.8 logical px.
+    const view = fitView(844, 360, { width: 640, height: 400 });
+    expect(view.scale).toBeCloseTo(0.9, 6);
+    expect(view.width).toBeCloseTo(937.78, 2);
+    expect(view.height).toBeCloseTo(400, 6);
+  });
+
   it("scales a narrow screen down by its width", () => {
     // 800 / 1000 = 0.8, so 700 css px become 875 logical px.
     const view = fitView(800, 700);
