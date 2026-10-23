@@ -11,7 +11,8 @@ import { BURSTS, burst, drawParticles, emitCount, exhaust, stepParticles, type P
 import { addTrauma, decayTrauma, shakeOffset } from "../fx/shake";
 import { directionAngle, hex, type Point } from "../hex/hex";
 import { drawPart, drawShip } from "../render/drawShip";
-import { drawText, THEME } from "../render/ui";
+import { drawTouchControls, touchControlRects, type HeldControls, type TouchControls } from "../render/touchControls";
+import { drawText, pointInRect, THEME } from "../render/ui";
 import { repairShip } from "../ship/damage";
 import { engineFlame, type PlacedPart } from "../ship/ship";
 import { computeShipStats } from "../ship/stats";
@@ -71,6 +72,9 @@ export class FlightScene implements Scene {
   private thrust = 0;
   private fuel: number;
   private time = 0;
+  private touch = false; // the player is on a touch screen, so the flight buttons are shown
+  private controls: TouchControls | null = null; // laid out at the last render
+  private held: HeldControls = { left: false, right: false, thrust: false, brake: false };
   private stars = STAR_LAYERS.map((layer) =>
     Array.from({ length: layer.count }, () => ({ x: Math.random() * STAR_FIELD, y: Math.random() * STAR_FIELD })),
   );
@@ -117,15 +121,22 @@ export class FlightScene implements Scene {
       return;
     }
 
-    if (input.wasPressed("Escape")) {
+    this.touch = input.usingTouch;
+    const controls = this.touch ? this.controls : null;
+    const tappedBack = controls !== null && input.wasClicked(0) && pointInRect(input.mouse, controls.back);
+    if (input.wasPressed("Escape") || tappedBack) {
       this.options.onAbort(this.trip());
       return;
     }
 
-    const forward = input.isDown("KeyW") || input.isDown("ArrowUp");
-    const back = input.isDown("KeyS") || input.isDown("ArrowDown");
-    const left = input.isDown("KeyA") || input.isDown("ArrowLeft");
-    const right = input.isDown("KeyD") || input.isDown("ArrowRight");
+    // A finger held on an on-screen button counts the same as holding its key.
+    const touches = input.touches();
+    const touching = (r: keyof HeldControls): boolean => controls !== null && touches.some((p) => pointInRect(p, controls[r]));
+    this.held = { left: touching("left"), right: touching("right"), thrust: touching("thrust"), brake: touching("brake") };
+    const forward = input.isDown("KeyW") || input.isDown("ArrowUp") || this.held.thrust;
+    const back = input.isDown("KeyS") || input.isDown("ArrowDown") || this.held.brake;
+    const left = input.isDown("KeyA") || input.isDown("ArrowLeft") || this.held.left;
+    const right = input.isDown("KeyD") || input.isDown("ArrowRight") || this.held.right;
     // Turning is free; thrusting and braking need fuel.
     this.thrust = this.fuel > 0 ? (forward ? 1 : 0) - (back ? 1 : 0) : 0;
     const turn = (right ? 1 : 0) - (left ? 1 : 0);
@@ -511,7 +522,7 @@ export class FlightScene implements Scene {
       drawText(ctx, "CORE DESTROYED", width / 2, height / 2 - 90, { align: "center", size: 28, bold: true, color: THEME.bad });
     } else if (this.fuel <= 0) {
       drawText(ctx, "OUT OF FUEL", width / 2, height / 2 - 90, { align: "center", size: 24, bold: true, color: THEME.bad });
-      drawText(ctx, `Esc: call a tow back to ${this.from.name} (−$${ECONOMY.towFee})`, width / 2, height / 2 - 62, {
+      drawText(ctx, `${this.touch ? "Call tow" : "Esc"}: call a tow back to ${this.from.name} (−$${ECONOMY.towFee})`, width / 2, height / 2 - 62, {
         align: "center",
         size: 15,
         color: THEME.text,
@@ -522,6 +533,11 @@ export class FlightScene implements Scene {
 
     if (this.inDockZone()) {
       drawText(ctx, "Slow down to dock", width / 2, height - 70, { align: "center", size: 18, bold: true, color: THEME.warn });
+    }
+    this.controls = touchControlRects(width, height);
+    if (this.touch) {
+      if (this.wreckTimer === null) drawTouchControls(ctx, this.controls, this.held, this.fuel > 0 ? "Turn back" : "Call tow");
+      return;
     }
     drawText(ctx, `W / ↑ thrust · S / ↓ brake · A D / ← → turn · weapons fire on their own · Esc turn back · M ${this.options.sound.isMuted ? "unmute" : "mute"}`, width / 2, height - 24, {
       align: "center",

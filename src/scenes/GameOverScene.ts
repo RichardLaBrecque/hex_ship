@@ -1,7 +1,7 @@
 import type { Run } from "../economy/run";
 import type { Input } from "../engine/input";
 import type { Scene } from "../engine/scene";
-import { drawText, THEME } from "../render/ui";
+import { drawButton, drawText, pointInRect, THEME, type Rect } from "../render/ui";
 import type { NewBests, Records } from "../save/records";
 
 export type GameOverOptions = {
@@ -12,10 +12,15 @@ export type GameOverOptions = {
 };
 
 export class GameOverScene implements Scene {
+  private touch = false; // on a touch screen there's a New run button instead of the Enter hint
+  private newRunButton: Rect | null = null; // laid out at the last render, while on touch
+
   constructor(private options: GameOverOptions) {}
 
   update(_dt: number, input: Input): void {
-    if (input.wasPressed("Enter") || input.wasPressed("Space")) this.options.onRestart();
+    this.touch = input.usingTouch;
+    const tapped = this.newRunButton !== null && input.wasClicked(0) && pointInRect(input.mouse, this.newRunButton);
+    if (input.wasPressed("Enter") || input.wasPressed("Space") || tapped) this.options.onRestart();
   }
 
   render(ctx: CanvasRenderingContext2D, width: number, height: number): void {
@@ -52,6 +57,12 @@ export class GameOverScene implements Scene {
     });
 
     const bottom = top + 216 + records.recent.length * 20 + 24;
-    drawText(ctx, "Enter: start a new run", width / 2, bottom, { align: "center", size: 15, color: THEME.accent });
+    if (this.touch) {
+      this.newRunButton = { x: width / 2 - 100, y: bottom - 22, w: 200, h: 44 };
+      drawButton(ctx, this.newRunButton, "New run", { enabled: true, hovered: false });
+    } else {
+      this.newRunButton = null;
+      drawText(ctx, "Enter: start a new run", width / 2, bottom, { align: "center", size: 15, color: THEME.accent });
+    }
   }
 }

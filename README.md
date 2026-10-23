@@ -40,6 +40,10 @@ back to it.
 | Flight   | `Esc`                     | Turn back                             |
 | Anywhere | `M` or the speaker button | Mute                                  |
 
+**On a phone or tablet,** hold it sideways. Tap to do anything you'd click. In the station, the Rotate, Sell and
+Done buttons under the grid stand in for the keys. In flight, the buttons in the bottom corners turn, thrust and
+brake, and you can hold two at once.
+
 ## Tech stack
 
 - TypeScript with no game framework. It draws vector art on an HTML Canvas.
