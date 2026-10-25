@@ -14,7 +14,9 @@ export function valueTier(value: number, previous: number, danger: Danger = DANG
 export const notorietyTier = (kills: number, danger: Danger = DANGER): number => 1 + Math.floor(kills / danger.killsPerTier);
 
 // The danger tier a launch right now would fly at, capped at the highest defined level.
+// Carrying the Grand Haul puts it at the top level.
 export function dangerTier(run: Run, catalog: PartCatalog = PARTS, danger: Danger = DANGER): number {
+  if (run.cargo.some((c) => c.grand)) return danger.levels.length;
   const byValue = valueTier(shipValue(run.ship, catalog), run.valueTier, danger);
   return Math.min(danger.levels.length, Math.max(byValue, notorietyTier(run.kills, danger)));
 }

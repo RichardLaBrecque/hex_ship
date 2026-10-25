@@ -26,6 +26,7 @@ const TEST_ECONOMY: Economy = {
   dumpReputationLoss: 0,
   payDistance: 1,
   contractTiers: [{ rank: "ONLY", unlockAt: 0, units: { min: 1, max: 1 }, pay: { min: 1, max: 1 } }],
+  grandHaul: { units: 1, basePay: 0 },
   bountyShare: 0,
 };
 

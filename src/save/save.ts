@@ -9,7 +9,7 @@ import { browserStore, parseJson, type Store } from "./store";
 // The run in progress, saved at every station change and at launch, and deleted when the core is lost.
 // Bump the version whenever Run changes shape: an older save is then ignored instead of loading half-filled.
 export const SAVE_KEY = "hex-ship/run";
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
 
 type SavedRun = Omit<Run, "ship"> & { ship: PlacedPart[] };
 type SaveFile = { version: number; run: SavedRun };
@@ -30,18 +30,20 @@ export function loadRun(store: Store = browserStore(), catalog: PartCatalog = PA
 
 // Older saves, brought up to the current shape. Null for a version this game doesn't know.
 // Version 1 is version 2 before boss trips were counted. Version 2 had only two planets, so every contract
-// went from the planet you were docked at to the other one.
+// went from the planet you were docked at to the other one. Version 3 is version 4 before the Grand Haul,
+// so no contract in it is grand.
 function upgrade(file: SaveFile): SavedRun | null {
   const { version, run } = file;
   if (version === SAVE_VERSION) return run;
-  if (version !== 1 && version !== 2) return null;
+  if (version !== 1 && version !== 2 && version !== 3) return null;
   if (typeof run !== "object" || run === null) return null;
-  const twoPlanet = (c: Contract): Contract => ({ ...c, from: run.docked, to: run.docked === 0 ? 1 : 0 });
+  const routed = (c: Contract): Contract => (version === 3 ? c : { ...c, from: run.docked, to: run.docked === 0 ? 1 : 0 });
+  const upgraded = (c: Contract): Contract => ({ ...routed(c), grand: false });
   return {
     ...run,
     topTrips: version === 1 ? 0 : run.topTrips,
-    offers: Array.isArray(run.offers) ? run.offers.map(twoPlanet) : run.offers,
-    cargo: Array.isArray(run.cargo) ? run.cargo.map(twoPlanet) : run.cargo,
+    offers: Array.isArray(run.offers) ? run.offers.map(upgraded) : run.offers,
+    cargo: Array.isArray(run.cargo) ? run.cargo.map(upgraded) : run.cargo,
   };
 }
 
@@ -97,6 +99,7 @@ const isContract = (c: Contract): boolean =>
   Number.isFinite(c.payPerUnit) &&
   Number.isInteger(c.tier) &&
   isPlanet(c.from) &&
-  (c.to === null || isPlanet(c.to));
+  (c.to === null || isPlanet(c.to)) &&
+  typeof c.grand === "boolean";
 
 const isPlanet = (index: number): boolean => Number.isInteger(index) && index >= 0 && index < PLANETS.length;

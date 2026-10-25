@@ -11,6 +11,7 @@ export type Contract = {
   readonly tier: number; // index into ECONOMY.contractTiers
   readonly from: number; // index into PLANETS: where it was offered
   readonly to: number | null; // index into PLANETS, or null for an open contract that any other planet takes
+  readonly grand: boolean; // the Grand Haul (see grandHaul)
 };
 
 export const isOpen = (contract: Contract): boolean => contract.to === null;
@@ -21,6 +22,34 @@ export const deliverableAt = (contract: Contract, planet: number): boolean =>
 
 export const planetDistance = (a: number, b: number, planets: readonly Planet[] = PLANETS): number =>
   Math.hypot(planets[b].x - planets[a].x, planets[b].y - planets[a].y);
+
+// The indexes of the two planets farthest apart, the lower first: the ends of the Grand Haul.
+export function farthestPair(planets: readonly Planet[] = PLANETS): [number, number] {
+  let best: [number, number] = [0, 1];
+  for (let a = 0; a < planets.length; a++) {
+    for (let b = a + 1; b < planets.length; b++) {
+      if (planetDistance(a, b, planets) > planetDistance(...best, planets)) best = [a, b];
+    }
+  }
+  return best;
+}
+
+// The Grand Haul is only offered once `delivered` reaches the top reputation rank.
+export const grandHaulUnlocked = (delivered: number, econ: Economy = ECONOMY): boolean =>
+  unlockedTiers(delivered, econ) === econ.contractTiers.length;
+
+export const isGrandHaulEnd = (planet: number, planets: readonly Planet[] = PLANETS): boolean => farthestPair(planets).includes(planet);
+
+// The Grand Haul offered at `docked`, if it's one end of the farthest pair and it's unlocked: bound for the other end.
+export function grandHaul(day: number, delivered: number, docked: number, econ: Economy = ECONOMY, planets: readonly Planet[] = PLANETS): Contract | null {
+  if (!grandHaulUnlocked(delivered, econ) || !isGrandHaulEnd(docked, planets)) return null;
+  const [a, b] = farthestPair(planets);
+  const to = docked === a ? b : a;
+  const bonus = 1 + reputation(delivered, econ).payBonus;
+  const payPerUnit = Math.round(econ.grandHaul.basePay * bonus * (planetDistance(docked, to, planets) / econ.payDistance));
+  const top = econ.contractTiers.length - 1;
+  return { id: `${day}-grand`, cargo: "Grand Haul", units: econ.grandHaul.units, payPerUnit, tier: top, from: docked, to, grand: true };
+}
 
 export const contractPay = (contract: Contract): number => contract.units * contract.payPerUnit;
 
@@ -49,7 +78,8 @@ export function reputation(delivered: number, econ: Economy = ECONOMY): Reputati
 // Offers come from your best unlocked tier some of the time and from any unlocked tier otherwise,
 // so a small ship can still find work. Reputation raises the pay on all of them.
 // Pay is fixed when the offer is made. A contract for a set planet pays more per unit the farther away it is;
-// an open one pays a low fixed rate wherever it goes.
+// an open one pays a low fixed rate wherever it goes. At either end of the farthest pair the Grand Haul is offered too,
+// once it's unlocked.
 export function generateOffers(
   day: number,
   delivered: number,
@@ -61,7 +91,7 @@ export function generateOffers(
   const unlocked = unlockedTiers(delivered, econ);
   const bonus = 1 + reputation(delivered, econ).payBonus;
   const others = planets.map((_, i) => i).filter((i) => i !== docked);
-  return Array.from({ length: econ.offersPerStation }, (_, i) => {
+  const offers = Array.from({ length: econ.offersPerStation }, (_, i): Contract => {
     const tier = random() < econ.topTierShare ? unlocked - 1 : Math.floor(random() * unlocked);
     const { units, pay } = econ.contractTiers[tier];
     const cargo = CARGO_NAMES[Math.floor(random() * CARGO_NAMES.length)];
@@ -69,8 +99,10 @@ export function generateOffers(
     const base = randomInt(pay.min, pay.max, random) * bonus;
     const to = random() < econ.openShare ? null : others[Math.floor(random() * others.length)];
     const reach = to === null ? econ.openPayShare : planetDistance(docked, to, planets) / econ.payDistance;
-    return { id: `${day}-${i}`, cargo, units: count, payPerUnit: Math.max(1, Math.round(base * reach)), tier, from: docked, to };
+    return { id: `${day}-${i}`, cargo, units: count, payPerUnit: Math.max(1, Math.round(base * reach)), tier, from: docked, to, grand: false };
   });
+  const grand = grandHaul(day, delivered, docked, econ, planets);
+  return grand ? [...offers, grand] : offers;
 }
 
 export function loadContract(run: Run, id: string, catalog: PartCatalog = PARTS): Outcome {

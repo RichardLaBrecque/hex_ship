@@ -1,6 +1,18 @@
 import { COMBAT, ECONOMY, FLIGHT, PLANETS } from "../data/balance";
 import { BUILDABLE, PARTS, type PartId } from "../data/parts";
-import { cargoUnits, contractPay, dumpContract, dumpPenalty, loadContract, planetDistance, reputation, unloadContract, type Contract } from "../economy/contracts";
+import {
+  cargoUnits,
+  contractPay,
+  dumpContract,
+  dumpPenalty,
+  grandHaulUnlocked,
+  isGrandHaulEnd,
+  loadContract,
+  planetDistance,
+  reputation,
+  unloadContract,
+  type Contract,
+} from "../economy/contracts";
 import { fireCrew, hireCrew, hiringFees, wages } from "../economy/crew";
 import { dangerOutlook, type DangerOutlook } from "../economy/danger";
 import { refuel, refuelCost } from "../economy/fuel";
@@ -335,6 +347,12 @@ export class StationScene implements Scene {
     return fuel > 0 ? ` (incl. $${fuel} fuel)` : "";
   }
 
+  // At an end of the Grand Haul while it's still locked, says which rank offers it here; otherwise "".
+  private grandHaulHint(): string {
+    if (!isGrandHaulEnd(this.run.docked) || grandHaulUnlocked(this.run.delivered)) return "";
+    return `  ·  Grand Haul here at ${ECONOMY.contractTiers[ECONOMY.contractTiers.length - 1].rank}`;
+  }
+
   private inspectedPart(): PlacedPart | undefined {
     return this.inspected ? partAt(this.run.ship, this.inspected) : undefined;
   }
@@ -507,7 +525,7 @@ export class StationScene implements Scene {
       color: loaded > capacity ? THEME.bad : THEME.text,
     });
     const rep = reputation(this.run.delivered);
-    drawText(ctx, `${rep.rank} · +${Math.round(rep.payBonus * 100)}% pay${rep.next ? ` · ${rep.next.rank} at ${rep.next.at}` : ""}`, left, body.y + 30, {
+    drawText(ctx, `${rep.rank} · +${Math.round(rep.payBonus * 100)}% pay${rep.next ? ` · ${rep.next.rank} at ${rep.next.at}` : ""}${this.grandHaulHint()}`, left, body.y + 30, {
       color: THEME.accent,
       size: 12,
     });
@@ -960,7 +978,7 @@ export class StationScene implements Scene {
       color: THEME.muted,
     });
     const rep = reputation(this.run.delivered);
-    const next = rep.next ? `  ·  ${rep.next.rank} at ${rep.next.at} delivered` : "";
+    const next = `${rep.next ? `  ·  ${rep.next.rank} at ${rep.next.at} delivered` : ""}${this.grandHaulHint()}`;
     drawText(ctx, `${rep.rank} (${this.run.delivered} delivered, +${Math.round(rep.payBonus * 100)}% pay)${next}`, area.x + area.w / 2, area.y, {
       align: "center",
       color: THEME.accent,

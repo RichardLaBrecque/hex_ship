@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Economy, Planet } from "../src/data/balance";
-import { dumpContract, generateOffers, loadContract, reputation, unloadContract, type Contract } from "../src/economy/contracts";
+import { dumpContract, farthestPair, generateOffers, grandHaul, loadContract, reputation, unloadContract, type Contract } from "../src/economy/contracts";
 import { fireCrew, hireCrew, hiringFees } from "../src/economy/crew";
 import { afterFlight, arrive, bountyFor, launch, launchCost, launchProblems, towBack, type Outcome, type Run, type TripResult } from "../src/economy/run";
 import { buyPart, repairAll, repairCost, sellPart, sellValue } from "../src/economy/shop";
@@ -29,6 +29,7 @@ const TEST_ECONOMY: Economy = {
     { rank: "LOW", unlockAt: 0, units: { min: 1, max: 10 }, pay: { min: 10, max: 20 } },
     { rank: "HIGH", unlockAt: 3, units: { min: 20, max: 30 }, pay: { min: 50, max: 60 } },
   ],
+  grandHaul: { units: 50, basePay: 10 },
   bountyShare: 0.5,
 };
 
@@ -48,6 +49,7 @@ const CONTRACT = (id: string, units: number, payPerUnit = 10, route: Pick<Contra
   payPerUnit,
   tier: 0,
   ...route,
+  grand: false,
 });
 
 // Three planets in a row: planet 1 is 1000 px from planet 0 (one payDistance), planet 2 is 3000 px.
@@ -291,7 +293,7 @@ describe("generateOffers", () => {
     // tier roll 0 → top unlocked tier; cargo 0; units 1 + floor(0.5 × 10) = 6; pay 10 + floor(0.5 × 11) = 15;
     // not open; first other planet, one payDistance away
     const [offer] = generateOffers(3, 0, 0, sequence(0, 0, 0.5, 0.5, 0.9, 0), TEST_ECONOMY, TEST_PLANETS);
-    expect(offer).toEqual({ id: "3-0", cargo: "Medical supplies", units: 6, payPerUnit: 15, tier: 0, from: 0, to: 1 });
+    expect(offer).toEqual({ id: "3-0", cargo: "Medical supplies", units: 6, payPerUnit: 15, tier: 0, from: 0, to: 1, grand: false });
   });
 
   it("raises pay by the reputation bonus for every contract delivered", () => {
@@ -324,10 +326,52 @@ describe("generateOffers", () => {
     expect(offer).toMatchObject({ from: 0, to: null, payPerUnit: 5 });
   });
 
+  it("adds the Grand Haul at either end of the farthest pair once the top rank is reached", () => {
+    // TEST_PLANETS 0 and 2 are 3000 px apart; planet 1 is in between. HIGH, the top rank, is at 3 delivered.
+    expect(generateOffers(3, 3, 0, sequence(0.5), TEST_ECONOMY, TEST_PLANETS).map((c) => c.grand)).toEqual([false, false, true]);
+    expect(generateOffers(3, 3, 1, sequence(0.5), TEST_ECONOMY, TEST_PLANETS).some((c) => c.grand)).toBe(false);
+    expect(generateOffers(3, 2, 0, sequence(0.5), TEST_ECONOMY, TEST_PLANETS).some((c) => c.grand)).toBe(false);
+  });
+
   it("never sends cargo to the planet it's offered at", () => {
     // docked at planet 1: the first other planet is planet 0
     const [offer] = generateOffers(3, 0, 1, sequence(0, 0, 0.5, 0.5, 0.9, 0), TEST_ECONOMY, TEST_PLANETS);
     expect(offer).toMatchObject({ from: 1, to: 0 });
+  });
+});
+
+describe("farthestPair", () => {
+  it("finds the two planets farthest apart", () => {
+    expect(farthestPair(TEST_PLANETS)).toEqual([0, 2]);
+  });
+});
+
+describe("grandHaul", () => {
+  it("is bound for the other end, at basePay per unit for each payDistance", () => {
+    // 3000 px = 3 payDistances × $10 = $30 per unit, +30% for 3 delivered = $39, for 50 units, as the top tier
+    expect(grandHaul(4, 3, 2, TEST_ECONOMY, TEST_PLANETS)).toEqual({
+      id: "4-grand",
+      cargo: "Grand Haul",
+      units: 50,
+      payPerUnit: 39,
+      tier: 1,
+      from: 2,
+      to: 0,
+      grand: true,
+    });
+  });
+
+  it("pays more as reputation grows", () => {
+    // 5 delivered × 10% = +50%: $30 → $45 per unit
+    expect(grandHaul(4, 5, 0, TEST_ECONOMY, TEST_PLANETS)?.payPerUnit).toBe(45);
+  });
+
+  it("isn't offered before the top rank", () => {
+    expect(grandHaul(4, 2, 0, TEST_ECONOMY, TEST_PLANETS)).toBeNull();
+  });
+
+  it("isn't offered between the ends", () => {
+    expect(grandHaul(4, 3, 1, TEST_ECONOMY, TEST_PLANETS)).toBeNull();
   });
 });
 

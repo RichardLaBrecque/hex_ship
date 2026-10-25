@@ -2,12 +2,13 @@ import { describe, expect, it } from "vitest";
 import { COMBAT, ECONOMY, PLANETS } from "../src/data/balance";
 import { BOSS, bossTier, DANGER, ENEMY_TIERS } from "../src/data/enemies";
 import { BUILDABLE, PARTS } from "../src/data/parts";
+import { farthestPair, planetDistance } from "../src/economy/contracts";
 import { repairCost, sellValue } from "../src/economy/shop";
-import { hex } from "../src/hex/hex";
-import { shipValue, starterShip } from "../src/ship/ship";
+import { hex, hexDistance, hexesInRadius, hexKey, type Hex } from "../src/hex/hex";
+import { placePart, shipValue, starterShip, type Ship } from "../src/ship/ship";
 import { computeShipStats } from "../src/ship/stats";
 import { validateShip } from "../src/ship/validate";
-import { burnFuel } from "../src/sim/fuel";
+import { burnFuel, tripFuelEstimate } from "../src/sim/fuel";
 import { stepBody, thrustSpin, type Body } from "../src/sim/physics";
 import { buildEnemy } from "../src/sim/spawner";
 import { seeded } from "./random";
@@ -44,6 +45,43 @@ describe("balance", () => {
         expect(repairCost(new Map([["0,0", part]])), `${type} at ${hp} hp`).toBeLessThan(replace);
       }
     }
+  });
+
+  describe("the Grand Haul", () => {
+    // The shipyard's grid: every hex within 5 of the bridge.
+    const GRID = hexesInRadius(5);
+    const ORIGIN = hex(0, 0);
+
+    // A hauler built inside the grid: seven engines on its back edge exhausting off the grid, crew for them,
+    // the Grand Haul's cargo bays, then fuel tanks nearest the bridge until one tank load crosses the farthest pair.
+    function hauler(): Ship {
+      let ship: Ship = placePart(new Map(), ORIGIN, "bridge", 0);
+      const engines = [hex(-5, 0), hex(-4, -1), hex(-5, 1), hex(-3, -2), hex(-5, 2), hex(-2, -3), hex(-5, 3)];
+      for (const h of engines) ship = placePart(ship, h, "engine", 3);
+      const free = (): Hex[] =>
+        GRID.filter((h) => !ship.has(hexKey(h))).sort((a, b) => hexDistance(a, ORIGIN) - hexDistance(b, ORIGIN));
+      for (let i = 0; i < 2; i++) ship = placePart(ship, free()[0], "crew", 0);
+      for (let i = 0; i < ECONOMY.grandHaul.units / PARTS.cargo.cargo; i++) ship = placePart(ship, free()[0], "cargo", 0);
+      const crossing = planetDistance(...farthestPair());
+      const fuelShort = (): boolean => {
+        const stats = computeShipStats(ship, Infinity);
+        return stats.fuelCapacity < tripFuelEstimate(stats, crossing);
+      };
+      while (fuelShort() && free().length > 0) ship = placePart(ship, free()[0], "fuel", 0);
+      return ship;
+    }
+
+    it("can be carried between the farthest planets by a spaceworthy ship that fits the shipyard", () => {
+      const ship = hauler();
+      const stats = computeShipStats(ship, Infinity);
+      expect(validateShip(ship).valid).toBe(true);
+      expect(stats.cargoCapacity).toBeGreaterThanOrEqual(ECONOMY.grandHaul.units);
+      expect(stats.fuelCapacity).toBeGreaterThanOrEqual(tripFuelEstimate(stats, planetDistance(...farthestPair())));
+    });
+
+    it("leaves less than a quarter of the shipyard for weapons and armor", () => {
+      expect(GRID.length - hauler().size).toBeLessThan(GRID.length / 4);
+    });
   });
 
   describe("rock/paper/scissors", () => {

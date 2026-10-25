@@ -81,6 +81,11 @@ describe("dangerTier", () => {
   it("never goes past the highest level", () => {
     expect(dangerTier(run({ ship: shipWorth(9), kills: 99 }), TEST_PARTS, TEST_DANGER)).toBe(3);
   });
+
+  it("is the highest level while the Grand Haul is aboard", () => {
+    const grand = { id: "9", cargo: "GRAND", units: 9, payPerUnit: 9, tier: 0, from: 0, to: 1, grand: true };
+    expect(dangerTier(run({ ship: shipWorth(0), kills: 0, cargo: [grand] }), TEST_PARTS, TEST_DANGER)).toBe(3);
+  });
 });
 
 describe("dangerOutlook", () => {
