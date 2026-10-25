@@ -1062,8 +1062,9 @@ export class StationScene implements Scene {
     const bound = contract.to === null ? "any planet" : PLANETS[contract.to].name;
     const route = `${contract.units} × $${contract.payPerUnit} → ${bound}`;
     const pay = `$${contractPay(contract)}`;
-    const tier = `T${contract.tier + 1}`;
-    const tierStyle: TextStyle = { align: "right", bold: true, size: 12, color: THEME.accent };
+    // The Grand Haul is marked as the win it is.
+    const tier = contract.grand ? "WINS RUN" : `T${contract.tier + 1}`;
+    const tierStyle: TextStyle = { align: "right", bold: true, size: 12, color: contract.grand ? THEME.warn : THEME.accent };
     const nameStyle: TextStyle = { bold: true, color: colors.textColor };
     const routeStyle: TextStyle = { color: THEME.muted, size: 12 };
     const footerStyle: TextStyle = { size: 11, color: colors.footerColor };

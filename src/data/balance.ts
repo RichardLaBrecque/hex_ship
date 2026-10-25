@@ -71,7 +71,7 @@ export const ECONOMY = {
     { rank: "Trusted", unlockAt: 15, units: { min: 25, max: 45 }, pay: { min: 28, max: 45 } },
     { rank: "Renowned", unlockAt: 30, units: { min: 40, max: 70 }, pay: { min: 40, max: 65 } },
   ],
-  // The Grand Haul: a huge contract on the board at each of the two planets farthest apart, bound for the other,
+  // The Grand Haul: a winning contract on the board at each of the two planets farthest apart, bound for the other,
   // once reputation reaches the top rank. It needs so many cargo bays that little room is left for weapons
   // (tests/balance.test.ts shows a ship can carry it), and carrying it puts danger at the top level (see dangerTier).
   grandHaul: { units: 500, basePay: 30 }, // basePay: per unit at payDistance, scaled by distance and reputation like any routed contract

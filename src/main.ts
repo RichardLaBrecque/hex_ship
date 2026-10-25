@@ -1,6 +1,7 @@
 import { Sound } from "./audio/sound";
 import { PLANETS } from "./data/balance";
 import { afterFlight, arrive, launch, newRun, towBack, type Run } from "./economy/run";
+import { deliveredGrandHaul } from "./economy/victory";
 import { Input } from "./engine/input";
 import { startLoop } from "./engine/loop";
 import { SceneManager } from "./engine/scene";
@@ -67,6 +68,10 @@ function startTrip(docked: Run): void {
       onArrive: (trip, planet) => {
         sound.dock();
         const { run, delivered, earned } = arrive(flying, trip, planet);
+        if (deliveredGrandHaul(delivered)) {
+          endRun(run, "merchant");
+          return;
+        }
         const report =
           delivered.length > 0
             ? `Delivered ${delivered.length} contract(s): +$${earned}`
@@ -80,16 +85,33 @@ function startTrip(docked: Run): void {
           ? openStation(afterFlight(flying, trip), withBounty("Turned back. Wages aren't refunded.", trip.bounty))
           : openStation(towBack(afterFlight(flying, trip)), withBounty("Towed back on an empty tank.", trip.bounty)),
       onDestroyed: () => endRun(flying, "destroyed"),
+      onVictory: (trip) => endRun(afterFlight(flying, trip), "warrior"),
     }),
   );
 }
 
-// The core is lost, or the player ended the run at a station: the save goes and the score joins the records.
+// The core is lost, the player ended the run at a station, or the run was won: the save goes and the score joins the records.
 function endRun(run: Run, reason: RunEnd): void {
   clearRun();
-  const { records, newBests } = addScore(loadRecords(), scoreOf(run));
+  const win = reason === "warrior" || reason === "merchant" ? reason : undefined;
+  const { records, newBests } = addScore(loadRecords(), scoreOf(run, win));
   saveRecords(records);
-  scenes.switchTo(new GameOverScene({ run, reason, records, newBests, onRestart: () => openStation(newRun()) }));
+  const url = window.location.href.split(/[?#]/)[0];
+  scenes.switchTo(new GameOverScene({ run, reason, records, newBests, onRestart: () => openStation(newRun()), share, url }));
+}
+
+// Phones get the share sheet; everything else copies to the clipboard. Resolves to what to tell the player.
+async function share(text: string): Promise<string> {
+  try {
+    if (input.usingTouch && navigator.share) {
+      await navigator.share({ text });
+      return "Shared!";
+    }
+    await navigator.clipboard.writeText(text);
+    return "Copied to the clipboard. Paste it anywhere to share.";
+  } catch {
+    return "Couldn't share from this browser.";
+  }
 }
 
 // The game is laid out for landscape. A phone held upright pauses behind a note until it's turned.

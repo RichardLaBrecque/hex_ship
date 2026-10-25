@@ -11,7 +11,7 @@ export type Contract = {
   readonly tier: number; // index into ECONOMY.contractTiers
   readonly from: number; // index into PLANETS: where it was offered
   readonly to: number | null; // index into PLANETS, or null for an open contract that any other planet takes
-  readonly grand: boolean; // the Grand Haul (see grandHaul)
+  readonly grand: boolean; // the Grand Haul: delivering it wins the run
 };
 
 export const isOpen = (contract: Contract): boolean => contract.to === null;

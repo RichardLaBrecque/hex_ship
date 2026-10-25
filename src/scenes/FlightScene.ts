@@ -31,6 +31,7 @@ export type FlightOptions = {
   onArrive: (trip: TripResult, planet: number) => void; // docked at PLANETS[planet]
   onAbort: (trip: TripResult) => void; // fuel 0 means a tow is needed
   onDestroyed: () => void; // the core was destroyed
+  onVictory: (trip: TripResult) => void; // the boss was destroyed: the run is won
   sound: Sound;
 };
 
@@ -79,6 +80,7 @@ export class FlightScene implements Scene {
   private bounty = 0;
   private kills = 0;
   private wreckTimer: number | null = null; // counts down to Game Over once the core is lost
+  private victoryTimer: number | null = null; // counts down to the victory screen once the boss is destroyed
   private camera: Point;
   private thrust = 0;
   private fuel: number;
@@ -146,6 +148,15 @@ export class FlightScene implements Scene {
       if (this.wreckTimer <= 0) this.options.onDestroyed();
       return;
     }
+    // Once the boss is down the run is won, whatever happens to the ship in the moments before the victory screen.
+    if (this.victoryTimer !== null) {
+      this.victoryTimer -= dt;
+      this.thrust = 0;
+      this.options.sound.thrust(0);
+      this.stepWorld(dt);
+      if (this.victoryTimer <= 0) this.options.onVictory(this.trip());
+      return;
+    }
 
     this.touch = input.usingTouch;
     const controls = this.touch ? this.controls : null;
@@ -187,6 +198,10 @@ export class FlightScene implements Scene {
     for (const i of refill.due) this.spawnEnemy(this.slots[i], i, respawnBody(player.body, Math.random));
 
     this.stepWorld(dt);
+    if (bossDefeated(this.slots)) {
+      this.victoryTimer = COMBAT.wreckDelay;
+      return;
+    }
     if (isWrecked(player)) {
       this.wreckTimer = COMBAT.wreckDelay;
       this.explode(player);
@@ -669,7 +684,10 @@ export class FlightScene implements Scene {
     if (this.dangerFlash > 0) {
       drawText(ctx, `DANGER RISING: ${this.danger}`, width / 2, 70, { align: "center", size: 22, bold: true, color: THEME.bad });
     }
-    if (this.wreckTimer !== null) {
+    if (this.victoryTimer !== null) {
+      drawText(ctx, "FLAGSHIP DESTROYED", width / 2, height / 2 - 110, { align: "center", size: 30, bold: true, color: THEME.good });
+      drawText(ctx, "VICTORY", width / 2, height / 2 - 76, { align: "center", size: 20, bold: true, color: THEME.warn });
+    } else if (this.wreckTimer !== null) {
       drawText(ctx, "CORE DESTROYED", width / 2, height / 2 - 90, { align: "center", size: 28, bold: true, color: THEME.bad });
     } else if (this.fuel <= 0) {
       drawText(ctx, "OUT OF FUEL", width / 2, height / 2 - 90, { align: "center", size: 24, bold: true, color: THEME.bad });
@@ -687,7 +705,7 @@ export class FlightScene implements Scene {
     }
     this.controls = touchControlRects(width, height);
     if (this.touch) {
-      if (this.wreckTimer === null) drawTouchControls(ctx, this.controls, this.held, this.fuel > 0 ? "Turn back" : "Call tow");
+      if (this.wreckTimer === null && this.victoryTimer === null) drawTouchControls(ctx, this.controls, this.held, this.fuel > 0 ? "Turn back" : "Call tow");
       return;
     }
     drawText(ctx, `W / ↑ thrust · S / ↓ brake · A D / ← → turn · weapons fire on their own · Esc turn back · M ${this.options.sound.isMuted ? "unmute" : "mute"}`, width / 2, height - 24, {

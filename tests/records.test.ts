@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { addScore, loadRecords, RECORDS_KEY, saveRecords, type Records, type Score } from "../src/save/records";
+import type { Run } from "../src/economy/run";
+import { addScore, loadRecords, RECORDS_KEY, saveRecords, scoreOf, type Records, type Score } from "../src/save/records";
 import { memoryStore } from "../src/save/store";
 
 const score = (day: number, peakShipValue: number, cargoEarned: number, bountiesEarned: number): Score => ({
@@ -29,7 +30,32 @@ describe("addScore", () => {
   });
 });
 
+describe("scoreOf", () => {
+  const run = { day: 9, peakShipValue: 500, cargoEarned: 900, bountiesEarned: 90 } as Run;
+
+  it("tags a won run with how it was won", () => {
+    expect(scoreOf(run, "merchant")).toEqual({ ...score(9, 500, 900, 90), win: "merchant" });
+  });
+
+  it("leaves the tag off a run that wasn't won", () => {
+    expect(scoreOf(run)).toEqual(score(9, 500, 900, 90));
+  });
+});
+
 describe("saveRecords / loadRecords", () => {
+  it("loads back a won run's tag", () => {
+    const store = memoryStore();
+    const records = { best: score(9, 500, 900, 90), recent: [{ ...score(9, 500, 900, 90), win: "warrior" as const }] };
+    saveRecords(records, store);
+    expect(loadRecords(store)).toEqual(records);
+  });
+
+  it("ignores records with a win it doesn't know", () => {
+    const store = memoryStore();
+    store.set(RECORDS_KEY, JSON.stringify({ best: score(9, 5, 9, 9), recent: [{ ...score(9, 5, 9, 9), win: "pacifist" }] }));
+    expect(loadRecords(store).recent).toEqual([]);
+  });
+
   it("loads back the records that were saved", () => {
     const store = memoryStore();
     const records = { best: score(9, 500, 900, 90), recent: [score(9, 500, 900, 90)] };

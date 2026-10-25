@@ -1,12 +1,14 @@
 import type { Run } from "../economy/run";
+import type { Win } from "../economy/victory";
 import { browserStore, parseJson, type Store } from "./store";
 
 // The high score: the best of each score column, plus the most recent finished runs.
 export const RECORDS_KEY = "hex-ship/records";
 export const RECENT_RUNS = 8;
 
-// One finished run's score columns, and the day it ended on.
-export type Score = { day: number; peakShipValue: number; cargoEarned: number; bountiesEarned: number };
+// One finished run's score columns, the day it ended on, and how it was won if it was. Records saved before
+// wins existed have no `win`.
+export type Score = { day: number; peakShipValue: number; cargoEarned: number; bountiesEarned: number; win?: Win };
 
 export type Records = { best: Score; recent: Score[] }; // recent: newest first
 
@@ -15,11 +17,12 @@ export type NewBests = { peakShipValue: boolean; cargoEarned: boolean; bountiesE
 
 const EMPTY: Records = { best: { day: 0, peakShipValue: 0, cargoEarned: 0, bountiesEarned: 0 }, recent: [] };
 
-export const scoreOf = (run: Run): Score => ({
+export const scoreOf = (run: Run, win?: Win): Score => ({
   day: run.day,
   peakShipValue: run.peakShipValue,
   cargoEarned: run.cargoEarned,
   bountiesEarned: run.bountiesEarned,
+  ...(win ? { win } : {}),
 });
 
 // Adds a finished run. Each column of `best` keeps its own maximum, so the bests can come from different runs.
@@ -33,6 +36,7 @@ export function addScore(records: Records, score: Score, keep: number = RECENT_R
   return {
     records: {
       best: {
+        // The bests mix columns from different runs, so they don't carry a win.
         day: Math.max(best.day, score.day),
         peakShipValue: Math.max(best.peakShipValue, score.peakShipValue),
         cargoEarned: Math.max(best.cargoEarned, score.cargoEarned),
@@ -61,4 +65,5 @@ const isScore = (s: Score): boolean =>
   Number.isFinite(s.day) &&
   Number.isFinite(s.peakShipValue) &&
   Number.isFinite(s.cargoEarned) &&
-  Number.isFinite(s.bountiesEarned);
+  Number.isFinite(s.bountiesEarned) &&
+  (s.win === undefined || s.win === "warrior" || s.win === "merchant");
