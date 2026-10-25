@@ -17,3 +17,11 @@ export function tripFuelEstimate(
   if (topSpeed <= 0) return Infinity;
   return Math.ceil((distance / topSpeed + 1 / tuning.drag) * ship.fuelBurn);
 }
+
+// How far `fuel` flies the ship by the same estimate: the farthest trip tripFuelEstimate says it covers.
+export function fuelRange(ship: { acceleration: number; fuelBurn: number }, fuel: number, tuning: FlightTuning = FLIGHT): number {
+  const topSpeed = (ship.acceleration * tuning.thrustScale) / tuning.drag;
+  if (topSpeed <= 0) return 0;
+  if (ship.fuelBurn <= 0) return Infinity;
+  return Math.max(0, (Math.floor(fuel) / ship.fuelBurn - 1 / tuning.drag) * topSpeed);
+}

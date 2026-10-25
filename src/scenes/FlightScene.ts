@@ -3,8 +3,8 @@ import { COMBAT, ECONOMY, FLIGHT, PLANETS, type Planet } from "../data/balance";
 import { bossTier, DANGER, ENCOUNTERS, ENEMY_TIERS, type Encounter, type EnemyTier } from "../data/enemies";
 import { dangerTier, isBossTrip } from "../economy/danger";
 import { PARTS } from "../data/parts";
-import { cargoUnits } from "../economy/contracts";
-import { bountyFor, destination, type TripResult, type Run } from "../economy/run";
+import { cargoUnits, deliverableAt, planetDistance } from "../economy/contracts";
+import { bountyFor, type TripResult, type Run } from "../economy/run";
 import type { Input } from "../engine/input";
 import type { Scene } from "../engine/scene";
 import { BURSTS, burst, drawParticles, emitCount, exhaust, stepParticles, type Particle } from "../fx/particles";
@@ -20,14 +20,14 @@ import { computeShipStats } from "../ship/stats";
 import { aiControls, type AiMode } from "../sim/ai";
 import { bounce, findContact, ramDamage } from "../sim/collision";
 import { burnFuel } from "../sim/fuel";
-import { activeThrust, speed, stepBody, type Body } from "../sim/physics";
+import { activeThrust, speed, stepBody } from "../sim/physics";
 import { buildEnemy, spawnBody } from "../sim/spawner";
 import { applyHit, hexWorld, isWrecked, makeVessel, setShip, type HitKind, type Vessel } from "../sim/vessel";
 import { fireWeapons, projectileHit, stepProjectile, weaponRange, type Beam, type Projectile } from "../sim/weapons";
 
 export type FlightOptions = {
   run: Run;
-  onArrive: (trip: TripResult) => void;
+  onArrive: (trip: TripResult, planet: number) => void; // docked at PLANETS[planet]
   onAbort: (trip: TripResult) => void; // fuel 0 means a tow is needed
   onDestroyed: () => void; // the core was destroyed
   sound: Sound;
@@ -55,9 +55,11 @@ const TRAUMA_PART_LOST = 0.3; // extra shake when the player loses a part
 const TRAUMA_KILL = 0.35; // shake from an enemy exploding right next to you; less further away
 const TRAUMA_KILL_RANGE = 600; // pixels at which an enemy exploding no longer shakes the screen
 
+// Free flight: the ship can dock at any planet except the one it left.
 export class FlightScene implements Scene {
+  private origin: number; // index into PLANETS of the planet the ship left
   private from: Planet;
-  private to: Planet;
+  private hop: number; // distance from the origin to its nearest neighbour; encounters trigger along it
   private player: Vessel;
   private enemies: Enemy[] = [];
   private projectiles: Projectile[] = [];
@@ -84,14 +86,20 @@ export class FlightScene implements Scene {
 
   constructor(private options: FlightOptions) {
     const { run } = options;
+    this.origin = run.docked;
     this.from = PLANETS[run.docked];
-    this.to = PLANETS[destination(run)];
+    const others = PLANETS.map((_, i) => i).filter((i) => i !== run.docked);
+    const byDistance = (a: number, b: number): number => planetDistance(run.docked, a) - planetDistance(run.docked, b);
+    this.hop = planetDistance(run.docked, [...others].sort(byDistance)[0]);
+    // Launch facing the nearest planet some cargo is bound for, or else the nearest planet.
+    const bound = others.filter((i) => run.cargo.some((c) => c.to === i));
+    const facing = PLANETS[[...(bound.length > 0 ? bound : others)].sort(byDistance)[0]];
     this.fuel = run.fuel;
     this.danger = dangerTier(run);
     this.bossTrip = isBossTrip(run);
     this.encounters = [...(this.bossTrip ? DANGER.boss.encounters : DANGER.levels[this.danger - 1])];
 
-    const heading = Math.atan2(this.to.y - this.from.y, this.to.x - this.from.x);
+    const heading = Math.atan2(facing.y - this.from.y, facing.x - this.from.x);
     const startDistance = this.from.radius + 80;
     const body = {
       x: this.from.x + Math.cos(heading) * startDistance,
@@ -153,7 +161,7 @@ export class FlightScene implements Scene {
     this.options.sound.setListener(player.body);
     this.options.sound.thrust(power);
 
-    if (this.encounters.length > 0 && this.routeProgress() >= this.encounters[0].at) {
+    if (this.encounters.length > 0 && this.progress() >= this.encounters[0].at) {
       const encounter = this.encounters.shift()!;
       for (const level of encounter.enemies) this.spawnEnemy(ENEMY_TIERS[level - 1]);
       if (encounter.boss) this.spawnEnemy(bossTier(shipValue(this.options.run.ship)));
@@ -173,12 +181,13 @@ export class FlightScene implements Scene {
       y: this.camera.y + (player.body.y - this.camera.y) * follow,
     };
 
-    if (this.inDockZone() && speed(player.body) < FLIGHT.dockSpeed) this.options.onArrive(this.trip());
+    const dock = this.dockZone();
+    if (dock !== null && speed(player.body) < FLIGHT.dockSpeed) this.options.onArrive(this.trip(), dock);
   }
 
   private spawnEnemy(tier: EnemyTier): void {
     const ship = buildEnemy(tier, Math.random);
-    const body = spawnBody(this.player.body, this.to, Math.random);
+    const body = spawnBody(this.player.body, this.ahead(), Math.random);
     const crew = computeShipStats(ship, 0).crewRequired; // enemies are always fully crewed
     const vessel = { ...makeVessel("enemy", ship, body, crew), aimError: tier.aimError };
     this.enemies.push({ vessel, bounty: bountyFor(ship), mode: "chase", thrust: 0 });
@@ -341,17 +350,39 @@ export class FlightScene implements Scene {
     }
   }
 
-  private distanceToDestination(): number {
-    return Math.hypot(this.to.x - this.player.body.x, this.to.y - this.player.body.y);
+  // How far out the ship is, as a share of the hop to the origin's nearest neighbour (see Encounter).
+  private progress(): number {
+    return Math.min(1, distance(this.player.body, this.from) / this.hop);
   }
 
-  private routeProgress(): number {
-    const total = Math.hypot(this.to.x - this.from.x, this.to.y - this.from.y);
-    return Math.min(1, Math.max(0, 1 - this.distanceToDestination() / total));
+  // A point well ahead of the ship: along its course when it's moving, else where it's facing. Enemies spawn that way.
+  private ahead(): Point {
+    const { body } = this.player;
+    const moving = speed(body) > FLIGHT.dockSpeed;
+    const angle = moving ? Math.atan2(body.vy, body.vx) : body.angle;
+    return { x: body.x + Math.cos(angle) * 1000, y: body.y + Math.sin(angle) * 1000 };
   }
 
-  private inDockZone(): boolean {
-    return this.distanceToDestination() < this.to.dockRadius;
+  // The index of the planet whose dock zone the ship is in, or null. The planet it left doesn't count.
+  private dockZone(): number | null {
+    const i = PLANETS.findIndex((p, i) => i !== this.origin && distance(this.player.body, p) < p.dockRadius);
+    return i >= 0 ? i : null;
+  }
+
+  // Whether docking at `planet` would deliver any of the cargo aboard, open cargo included.
+  private hasCargoFor(planet: number): boolean {
+    return this.options.run.cargo.some((c) => deliverableAt(c, planet));
+  }
+
+  // Whether some cargo aboard is bound for `planet` in particular. Open cargo alone doesn't count, since it goes anywhere.
+  private isBoundFor(planet: number): boolean {
+    return this.options.run.cargo.some((c) => c.to === planet);
+  }
+
+  // The nearest planet to the ship other than the one it left.
+  private nearestPlanet(): Planet {
+    const others = PLANETS.filter((_, i) => i !== this.origin);
+    return others.reduce((best, p) => (distance(this.player.body, p) < distance(this.player.body, best) ? p : best));
   }
 
   render(ctx: CanvasRenderingContext2D, width: number, height: number): void {
@@ -362,8 +393,7 @@ export class FlightScene implements Scene {
     const shake = shakeOffset(this.trauma, Math.random);
     ctx.save();
     ctx.translate(width / 2 - this.camera.x + shake.x, height / 2 - this.camera.y + shake.y);
-    this.renderPlanet(ctx, this.from, false);
-    this.renderPlanet(ctx, this.to, true);
+    PLANETS.forEach((planet, i) => this.renderPlanet(ctx, i, planet));
     this.renderDebris(ctx);
     for (const enemy of this.enemies) {
       this.renderVessel(ctx, enemy.vessel, enemy.thrust, THEME.bad);
@@ -374,7 +404,10 @@ export class FlightScene implements Scene {
     drawParticles(ctx, this.particles);
     ctx.restore();
 
-    this.renderEdgeArrow(ctx, width, height, this.to, THEME.good);
+    // Planets with cargo bound for them are green; the rest grey. The planet the ship left gets no arrow.
+    PLANETS.forEach((planet, i) => {
+      if (i !== this.origin) this.renderEdgeArrow(ctx, width, height, planet, this.isBoundFor(i) ? THEME.good : THEME.muted, planet.name);
+    });
     for (const enemy of this.enemies) this.renderEdgeArrow(ctx, width, height, enemy.vessel.body, THEME.bad);
     this.renderHud(ctx, width, height);
   }
@@ -474,12 +507,15 @@ export class FlightScene implements Scene {
     });
   }
 
-  private renderPlanet(ctx: CanvasRenderingContext2D, planet: Planet, isDestination: boolean): void {
-    if (isDestination) {
+  // Every planet but the one the ship left shows its dock zone: green with cargo bound there, grey without.
+  private renderPlanet(ctx: CanvasRenderingContext2D, index: number, planet: Planet): void {
+    if (index !== this.origin) {
+      const color = this.isBoundFor(index) ? THEME.good : THEME.muted;
       ctx.save();
       ctx.setLineDash([12, 10]);
       ctx.lineDashOffset = -this.time * 20;
-      ctx.strokeStyle = this.inDockZone() ? THEME.good : "#5fd38d66";
+      ctx.strokeStyle = color;
+      ctx.globalAlpha = this.dockZone() === index ? 1 : 0.4;
       ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.arc(planet.x, planet.y, planet.dockRadius, 0, Math.PI * 2);
@@ -504,8 +540,8 @@ export class FlightScene implements Scene {
     drawText(ctx, planet.name, planet.x, planet.y + planet.radius + 22, { align: "center", bold: true, color: THEME.text });
   }
 
-  // When a point is off screen, an arrow at the edge points to it.
-  private renderEdgeArrow(ctx: CanvasRenderingContext2D, width: number, height: number, target: Point, color: string): void {
+  // When a point is off screen, an arrow at the edge points to it, with an optional label beside it.
+  private renderEdgeArrow(ctx: CanvasRenderingContext2D, width: number, height: number, target: Point, color: string, label?: string): void {
     const dx = target.x - this.camera.x;
     const dy = target.y - this.camera.y;
     const margin = 40;
@@ -525,12 +561,18 @@ export class FlightScene implements Scene {
     ctx.closePath();
     ctx.fill();
     ctx.restore();
+    if (label) {
+      // Pulled in towards the centre so it stays on screen.
+      const inward = Math.atan2(height / 2 - y, width / 2 - x);
+      drawText(ctx, label, x + Math.cos(inward) * 34, y + Math.sin(inward) * 22, { align: "center", size: 12, bold: true, color });
+    }
   }
 
   private renderHud(ctx: CanvasRenderingContext2D, width: number, height: number): void {
     const s = this.player.stats;
-    drawText(ctx, `Flying to ${this.to.name}`, 20, 26, { size: 16, bold: true });
-    drawText(ctx, `Distance ${Math.round(this.distanceToDestination())}`, 20, 50, { color: THEME.muted });
+    const nearest = this.nearestPlanet();
+    drawText(ctx, `Left ${this.from.name}`, 20, 26, { size: 16, bold: true });
+    drawText(ctx, `Nearest: ${nearest.name} ${Math.round(distance(this.player.body, nearest))}`, 20, 50, { color: THEME.muted });
     drawText(ctx, `Speed ${Math.round(speed(this.player.body))}`, 20, 70, { color: THEME.muted });
     drawText(ctx, `Hull ${Math.round(s.hull)} / ${Math.round(s.maxHull)}`, 20, 90, { color: THEME.muted });
     drawText(ctx, `Shield ${Math.round(totalShield(this.player.shields))} / ${Math.round(s.shieldMax)}`, 20, 110, { color: THEME.muted });
@@ -555,10 +597,10 @@ export class FlightScene implements Scene {
       });
     }
 
-    this.renderRouteBar(ctx, width);
-
-    if (this.inDockZone()) {
-      drawText(ctx, "Slow down to dock", width / 2, height - 70, { align: "center", size: 18, bold: true, color: THEME.warn });
+    const dock = this.dockZone();
+    if (dock !== null) {
+      const cargo = this.hasCargoFor(dock) ? "" : " (no cargo for here)";
+      drawText(ctx, `Slow down to dock at ${PLANETS[dock].name}${cargo}`, width / 2, height - 70, { align: "center", size: 18, bold: true, color: THEME.warn });
     }
     this.controls = touchControlRects(width, height);
     if (this.touch) {
@@ -582,27 +624,8 @@ export class FlightScene implements Scene {
     ctx.fillStyle = color;
     ctx.fillRect(x, y + 12, w * share, 6);
   }
-
-  // A progress bar from origin to destination along the top of the screen.
-  private renderRouteBar(ctx: CanvasRenderingContext2D, width: number): void {
-    const { from, to } = this;
-    const progress = this.routeProgress();
-    const barWidth = Math.min(420, width - 480);
-    const x = (width - barWidth) / 2;
-    const y = 26;
-    ctx.fillStyle = THEME.panelBorder;
-    ctx.fillRect(x, y - 1, barWidth, 2);
-    ctx.fillStyle = THEME.good;
-    ctx.fillRect(x, y - 1, barWidth * progress, 2);
-    drawText(ctx, from.name, x - 10, y, { align: "right", color: THEME.muted, size: 12 });
-    drawText(ctx, to.name, x + barWidth + 10, y, { align: "left", color: THEME.muted, size: 12 });
-    ctx.fillStyle = THEME.text;
-    ctx.beginPath();
-    ctx.arc(x + barWidth * progress, y, 5, 0, Math.PI * 2);
-    ctx.fill();
-  }
 }
 
 const wrap = (value: number, size: number): number => ((value % size) + size) % size;
 
-const distance = (a: Body, b: Body): number => Math.hypot(a.x - b.x, a.y - b.y);
+const distance = (a: Point, b: Point): number => Math.hypot(a.x - b.x, a.y - b.y);

@@ -28,8 +28,10 @@ export function drawPanel(ctx: CanvasRenderingContext2D, r: Rect): void {
 
 export type TextStyle = { size?: number; color?: string; align?: CanvasTextAlign; bold?: boolean };
 
+const fontFor = (style: TextStyle): string => `${style.bold ? "600 " : ""}${style.size ?? 13}px system-ui, sans-serif`;
+
 export function drawText(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, style: TextStyle = {}): void {
-  ctx.font = `${style.bold ? "600 " : ""}${style.size ?? 13}px system-ui, sans-serif`;
+  ctx.font = fontFor(style);
   ctx.fillStyle = style.color ?? THEME.text;
   ctx.textAlign = style.align ?? "left";
   ctx.textBaseline = "middle";
@@ -52,6 +54,15 @@ export function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: 
   }
   if (line) lines.push(line);
   return lines;
+}
+
+// The text cut short with an ellipsis so it fits `maxWidth` in `style`, or the whole text if it already fits.
+export function fitText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number, style: TextStyle = {}): string {
+  ctx.font = fontFor(style);
+  if (ctx.measureText(text).width <= maxWidth) return text;
+  let cut = text;
+  while (cut.length > 0 && ctx.measureText(`${cut}…`).width > maxWidth) cut = cut.slice(0, -1);
+  return `${cut.trimEnd()}…`;
 }
 
 export function drawButton(

@@ -1,3 +1,4 @@
+import { PLANETS } from "../data/balance";
 import { PARTS, type PartCatalog } from "../data/parts";
 import type { Contract } from "../economy/contracts";
 import type { Run } from "../economy/run";
@@ -8,7 +9,7 @@ import { browserStore, parseJson, type Store } from "./store";
 // The run in progress, saved at every station change and at launch, and deleted when the core is lost.
 // Bump the version whenever Run changes shape: an older save is then ignored instead of loading half-filled.
 export const SAVE_KEY = "hex-ship/run";
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 
 type SavedRun = Omit<Run, "ship"> & { ship: PlacedPart[] };
 type SaveFile = { version: number; run: SavedRun };
@@ -21,11 +22,27 @@ export function saveRun(run: Run, store: Store = browserStore()): void {
 // The saved run, or null if there is none or it can't be read.
 export function loadRun(store: Store = browserStore(), catalog: PartCatalog = PARTS): Run | null {
   const file = parseJson(store.get(SAVE_KEY)) as SaveFile | null;
-  // Version 1 is version 2 before boss trips were counted.
-  const saved = file?.version === 1 ? { ...file.run, topTrips: 0 } : file?.run;
-  if (!file || (file.version !== 1 && file.version !== SAVE_VERSION) || !saved || !isSavedRun(saved, catalog)) return null;
+  const saved = file ? upgrade(file) : null;
+  if (!saved || !isSavedRun(saved, catalog)) return null;
   const { ship, ...rest } = saved;
   return { ...rest, ship: new Map(ship.map((part) => [hexKey(part.hex), part])) };
+}
+
+// Older saves, brought up to the current shape. Null for a version this game doesn't know.
+// Version 1 is version 2 before boss trips were counted. Version 2 had only two planets, so every contract
+// went from the planet you were docked at to the other one.
+function upgrade(file: SaveFile): SavedRun | null {
+  const { version, run } = file;
+  if (version === SAVE_VERSION) return run;
+  if (version !== 1 && version !== 2) return null;
+  if (typeof run !== "object" || run === null) return null;
+  const twoPlanet = (c: Contract): Contract => ({ ...c, from: run.docked, to: run.docked === 0 ? 1 : 0 });
+  return {
+    ...run,
+    topTrips: version === 1 ? 0 : run.topTrips,
+    offers: Array.isArray(run.offers) ? run.offers.map(twoPlanet) : run.offers,
+    cargo: Array.isArray(run.cargo) ? run.cargo.map(twoPlanet) : run.cargo,
+  };
 }
 
 export function clearRun(store: Store = browserStore()): void {
@@ -51,7 +68,7 @@ function isSavedRun(run: SavedRun | undefined, catalog: PartCatalog): boolean {
   ];
   return (
     numbers.every(Number.isFinite) &&
-    (run.docked === 0 || run.docked === 1) &&
+    isPlanet(run.docked) &&
     Array.isArray(run.ship) &&
     run.ship.length > 0 &&
     run.ship.every((part) => isPart(part, catalog)) &&
@@ -78,4 +95,8 @@ const isContract = (c: Contract): boolean =>
   typeof c.cargo === "string" &&
   Number.isFinite(c.units) &&
   Number.isFinite(c.payPerUnit) &&
-  Number.isInteger(c.tier);
+  Number.isInteger(c.tier) &&
+  isPlanet(c.from) &&
+  (c.to === null || isPlanet(c.to));
+
+const isPlanet = (index: number): boolean => Number.isInteger(index) && index >= 0 && index < PLANETS.length;

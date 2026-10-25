@@ -1,10 +1,10 @@
-import { ECONOMY, PLANETS, type Economy } from "../data/balance";
+import { ECONOMY, type Economy } from "../data/balance";
 import { PARTS, type PartCatalog } from "../data/parts";
 import { shipValue, starterShip, type Ship } from "../ship/ship";
 import { computeShipStats } from "../ship/stats";
 import { validateShip } from "../ship/validate";
 import { DANGER, type Danger } from "../data/enemies";
-import { cargoUnits, contractPay, generateOffers, type Contract } from "./contracts";
+import { cargoUnits, contractPay, deliverableAt, generateOffers, type Contract } from "./contracts";
 import { valueTier } from "./danger";
 import { hiringFees, wages } from "./crew";
 
@@ -16,9 +16,9 @@ export type Run = {
   readonly crew: number; // the roster as planned at this station
   readonly crewSigned: number; // crew whose signing fee is already paid
   readonly fuel: number; // units in the tanks
-  readonly docked: 0 | 1; // index into PLANETS
+  readonly docked: number; // index into PLANETS
   readonly offers: readonly Contract[]; // contracts on the board at this station
-  readonly cargo: readonly Contract[]; // contracts loaded aboard, paid on arrival
+  readonly cargo: readonly Contract[]; // contracts loaded aboard, paid when docking where they're bound
   readonly delivered: number; // contracts delivered this run: reputation
   readonly kills: number; // enemy ships destroyed this run: notoriety
   readonly valueTier: number; // ship-value danger tier as of the last launch (see danger.ts)
@@ -44,7 +44,7 @@ export function newRun(random: Random = Math.random, econ: Economy = ECONOMY): R
     crewSigned: econ.startingCrew,
     fuel: computeShipStats(ship, econ.startingCrew).fuelCapacity,
     docked: 0,
-    offers: generateOffers(1, 0, random, econ),
+    offers: generateOffers(1, 0, 0, random, econ),
     cargo: [],
     delivered: 0,
     kills: 0,
@@ -56,18 +56,12 @@ export function newRun(random: Random = Math.random, econ: Economy = ECONOMY): R
   };
 }
 
-export const destination = (run: Run): 0 | 1 => (run.docked === 0 ? 1 : 0);
-
-export function tripDistance(run: Run): number {
-  const from = PLANETS[run.docked];
-  const to = PLANETS[destination(run)];
-  return Math.hypot(to.x - from.x, to.y - from.y);
-}
-
 // Wages and new crew's signing fees are paid at launch. Fuel is bought separately when refuelling.
 export const launchCost = (run: Run, econ: Economy = ECONOMY): number => wages(run.crew, econ) + hiringFees(run, econ);
 
-export const expectedPay = (run: Run): number => run.cargo.reduce((sum, c) => sum + contractPay(c), 0);
+// What the cargo aboard pays when the ship docks at `planet`.
+export const payAt = (run: Run, planet: number): number =>
+  run.cargo.filter((c) => deliverableAt(c, planet)).reduce((sum, c) => sum + contractPay(c), 0);
 
 // Everything stopping the ship from leaving: layout problems plus money, crew and cargo.
 export function launchProblems(run: Run, catalog: PartCatalog = PARTS, econ: Economy = ECONOMY): string[] {
@@ -76,7 +70,7 @@ export function launchProblems(run: Run, catalog: PartCatalog = PARTS, econ: Eco
   if (run.crew > stats.crewCapacity) problems.push(`${run.crew - stats.crewCapacity} crew have no berth. Add crew modules or fire crew.`);
   if (run.crew === 0) problems.push("No crew to fly the ship.");
   const loaded = cargoUnits(run.cargo);
-  if (loaded > stats.cargoCapacity) problems.push(`Cargo is over capacity (${loaded} / ${stats.cargoCapacity}). Unload a contract.`);
+  if (loaded > stats.cargoCapacity) problems.push(`Cargo is over capacity (${loaded} / ${stats.cargoCapacity}). Unload a contract or add cargo bays.`);
   if (stats.fuelCapacity > 0 && run.fuel <= 0) problems.push("Fuel tank is empty. Refuel before launching.");
   const cost = launchCost(run, econ);
   if (run.money < cost) problems.push(`Launching costs $${cost} but you have $${run.money}.`);
@@ -123,13 +117,21 @@ export const towBack = (run: Run, econ: Economy = ECONOMY): Run => ({ ...run, fu
 
 export type Arrival = { run: Run; delivered: readonly Contract[]; earned: number };
 
-// Docking at the destination after `trip`: get paid for cargo, a day passes, a new contract board.
-// Every contract delivered adds to your reputation, which the new board already reflects.
-export function arrive(launched: Run, trip: TripResult, random: Random = Math.random, econ: Economy = ECONOMY, danger: Danger = DANGER): Arrival {
+// Docking at `planet` after `trip`: get paid for the cargo bound there, a day passes, a new contract board.
+// Cargo bound anywhere else stays aboard. Every contract delivered adds to your reputation, which the new board already reflects.
+export function arrive(
+  launched: Run,
+  trip: TripResult,
+  planet: number,
+  random: Random = Math.random,
+  econ: Economy = ECONOMY,
+  danger: Danger = DANGER,
+): Arrival {
   const run = afterFlight(launched, trip);
-  const earned = expectedPay(run);
+  const unloaded = run.cargo.filter((c) => deliverableAt(c, planet));
+  const earned = payAt(run, planet);
   const day = run.day + 1;
-  const delivered = run.delivered + run.cargo.length;
+  const delivered = run.delivered + unloaded.length;
   return {
     run: {
       ...run,
@@ -137,12 +139,12 @@ export function arrive(launched: Run, trip: TripResult, random: Random = Math.ra
       money: run.money + earned,
       cargoEarned: run.cargoEarned + earned,
       day,
-      docked: destination(run),
-      cargo: [],
+      docked: planet,
+      cargo: run.cargo.filter((c) => !deliverableAt(c, planet)),
       delivered,
-      offers: generateOffers(day, delivered, random, econ),
+      offers: generateOffers(day, delivered, planet, random, econ),
     },
-    delivered: run.cargo,
+    delivered: unloaded,
     earned,
   };
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Economy } from "../src/data/balance";
+import type { Economy, Planet } from "../src/data/balance";
 import { generateOffers, loadContract, reputation, unloadContract, type Contract } from "../src/economy/contracts";
 import { fireCrew, hireCrew, hiringFees } from "../src/economy/crew";
 import { afterFlight, arrive, bountyFor, launch, launchCost, launchProblems, towBack, type Outcome, type Run, type TripResult } from "../src/economy/run";
@@ -20,6 +20,9 @@ const TEST_ECONOMY: Economy = {
   offersPerStation: 2,
   payBonusPerDelivery: 0.1,
   topTierShare: 0.5,
+  openShare: 0.5,
+  openPayShare: 0.5,
+  payDistance: 1000,
   contractTiers: [
     { rank: "LOW", unlockAt: 0, units: { min: 1, max: 10 }, pay: { min: 10, max: 20 } },
     { rank: "HIGH", unlockAt: 3, units: { min: 20, max: 30 }, pay: { min: 50, max: 60 } },
@@ -35,7 +38,19 @@ function testShip(): Ship {
   return placePart(ship, hex(0, 1), "cargo", 0, TEST_PARTS);
 }
 
-const CONTRACT = (id: string, units: number, payPerUnit = 10): Contract => ({ id, cargo: "ORE", units, payPerUnit, tier: 0 });
+// Loaded at planet 0 and bound for planet 1 unless a route is given.
+const CONTRACT = (id: string, units: number, payPerUnit = 10, route: Pick<Contract, "from" | "to"> = { from: 0, to: 1 }): Contract => ({
+  id,
+  cargo: "ORE",
+  units,
+  payPerUnit,
+  tier: 0,
+  ...route,
+});
+
+// Three planets in a row: planet 1 is 1000 px from planet 0 (one payDistance), planet 2 is 3000 px.
+const planet = (x: number): Planet => ({ name: `P${x}`, x, y: 0, radius: 1, dockRadius: 1, color: "#000" });
+const TEST_PLANETS: readonly Planet[] = [planet(0), planet(1000), planet(3000)];
 
 // A trip at danger 1 that changed nothing: no fuel burned, no damage, no kills.
 const quietTrip = (run: Run): TripResult => ({ fuel: run.fuel, ship: run.ship, bounty: 0, kills: 0, danger: 1 });
@@ -235,31 +250,56 @@ describe("contracts", () => {
     expect(run.offers.map((c) => c.id)).toEqual(["A"]);
   });
 
+  it("can't unload cargo loaded at another planet", () => {
+    const run = testRun({ docked: 0, cargo: [CONTRACT("A", 4, 10, { from: 2, to: 1 })] });
+    expect(reason(unloadContract(run, "A", TEST_PLANETS))).toBe("That cargo was loaded at P3000. It stays aboard until you reach P1000.");
+  });
+
 });
 
 describe("generateOffers", () => {
+  // Rolls in order: tier, cargo, units, pay, open (under openShare is open), then which other planet.
   it("offers only the first tier to a newcomer", () => {
-    // tier roll 0 → top unlocked tier; cargo 0; units 1 + floor(0.5 × 10) = 6; pay 10 + floor(0.5 × 11) = 15
-    const [offer] = generateOffers(3, 0, sequence(0, 0, 0.5, 0.5), TEST_ECONOMY);
-    expect(offer).toEqual({ id: "3-0", cargo: "Medical supplies", units: 6, payPerUnit: 15, tier: 0 });
+    // tier roll 0 → top unlocked tier; cargo 0; units 1 + floor(0.5 × 10) = 6; pay 10 + floor(0.5 × 11) = 15;
+    // not open; first other planet, one payDistance away
+    const [offer] = generateOffers(3, 0, 0, sequence(0, 0, 0.5, 0.5, 0.9, 0), TEST_ECONOMY, TEST_PLANETS);
+    expect(offer).toEqual({ id: "3-0", cargo: "Medical supplies", units: 6, payPerUnit: 15, tier: 0, from: 0, to: 1 });
   });
 
   it("raises pay by the reputation bonus for every contract delivered", () => {
     // 2 delivered × 10% = +20%: 15 → 18
-    const [offer] = generateOffers(3, 2, sequence(0, 0, 0.5, 0.5), TEST_ECONOMY);
+    const [offer] = generateOffers(3, 2, 0, sequence(0, 0, 0.5, 0.5, 0.9, 0), TEST_ECONOMY, TEST_PLANETS);
     expect(offer.payPerUnit).toBe(18);
   });
 
   it("offers the best unlocked tier when the tier roll is under topTierShare", () => {
     // 3 delivered unlocks HIGH; units 20 + floor(0 × 11) = 20; pay 50 × 1.3 = 65
-    const [offer] = generateOffers(3, 3, sequence(0.4, 0, 0, 0), TEST_ECONOMY);
+    const [offer] = generateOffers(3, 3, 0, sequence(0.4, 0, 0, 0, 0.9, 0), TEST_ECONOMY, TEST_PLANETS);
     expect(offer).toMatchObject({ units: 20, payPerUnit: 65, tier: 1 });
   });
 
   it("can still offer a lower tier once higher ones are unlocked", () => {
     // tier roll 0.6 misses the top-tier chance; then 0.4 × 2 unlocked tiers → tier 0
-    const [offer] = generateOffers(3, 3, sequence(0.6, 0.4, 0, 0, 0), TEST_ECONOMY);
+    const [offer] = generateOffers(3, 3, 0, sequence(0.6, 0.4, 0, 0, 0, 0.9, 0), TEST_ECONOMY, TEST_PLANETS);
     expect(offer.tier).toBe(0);
+  });
+
+  it("pays more per unit the farther the cargo goes", () => {
+    // pay 15; the second other planet is 3000 px away: 3 payDistances → 45
+    const [offer] = generateOffers(3, 0, 0, sequence(0, 0, 0.5, 0.5, 0.9, 0.5), TEST_ECONOMY, TEST_PLANETS);
+    expect(offer).toMatchObject({ to: 2, payPerUnit: 45 });
+  });
+
+  it("offers open contracts at a share of the tier's pay, wherever they go", () => {
+    // pay 10 + floor(0 × 11) = 10; open roll 0.1 is under openShare; 10 × openPayShare 0.5 = 5
+    const [offer] = generateOffers(3, 0, 0, sequence(0, 0, 0.5, 0, 0.1), TEST_ECONOMY, TEST_PLANETS);
+    expect(offer).toMatchObject({ from: 0, to: null, payPerUnit: 5 });
+  });
+
+  it("never sends cargo to the planet it's offered at", () => {
+    // docked at planet 1: the first other planet is planet 0
+    const [offer] = generateOffers(3, 0, 1, sequence(0, 0, 0.5, 0.5, 0.9, 0), TEST_ECONOMY, TEST_PLANETS);
+    expect(offer).toMatchObject({ from: 1, to: 0 });
   });
 });
 
@@ -341,7 +381,7 @@ describe("launch", () => {
     const ship = new Map(testShip());
     ship.delete("0,1"); // sold the only cargo bay
     expect(launchProblems(testRun({ ship, cargo: [CONTRACT("A", 4)] }), TEST_PARTS, TEST_ECONOMY)).toContain(
-      "Cargo is over capacity (4 / 0). Unload a contract.",
+      "Cargo is over capacity (4 / 0). Unload a contract or add cargo bays.",
     );
   });
 });
@@ -355,9 +395,9 @@ describe("towBack", () => {
 });
 
 describe("arrive", () => {
-  it("pays for delivered cargo, moves a day on and docks at the other planet", () => {
+  it("pays for delivered cargo, moves a day on and docks at the planet it reached", () => {
     const run = testRun({ cargo: [CONTRACT("A", 4, 10), CONTRACT("B", 2, 25)], offers: [CONTRACT("OLD", 1)] });
-    const result = arrive(run, quietTrip(run), sequence(0), TEST_ECONOMY);
+    const result = arrive(run, quietTrip(run), 1, sequence(0), TEST_ECONOMY);
     expect(result.earned).toBe(90);
     expect(result.delivered.map((c) => c.id)).toEqual(["A", "B"]);
     expect(result.run.money).toBe(1090);
@@ -365,33 +405,50 @@ describe("arrive", () => {
     expect(result.run.docked).toBe(1);
     expect(result.run.cargo).toEqual([]);
     expect(result.run.offers.map((c) => c.id)).toEqual(["2-0", "2-1"]);
+    expect(result.run.offers.every((c) => c.from === 1)).toBe(true);
+  });
+
+  it("keeps cargo bound for other planets aboard, unpaid", () => {
+    const elsewhere = CONTRACT("B", 2, 25, { from: 0, to: 2 });
+    const run = testRun({ cargo: [CONTRACT("A", 4, 10), elsewhere] });
+    const result = arrive(run, quietTrip(run), 1, sequence(0), TEST_ECONOMY);
+    expect(result.earned).toBe(40);
+    expect(result.delivered.map((c) => c.id)).toEqual(["A"]);
+    expect(result.run.cargo).toEqual([elsewhere]);
+  });
+
+  it("delivers open cargo at any planet but the one it came from", () => {
+    const open = CONTRACT("A", 4, 10, { from: 0, to: null });
+    const run = testRun({ cargo: [open] });
+    expect(arrive(run, quietTrip(run), 2, sequence(0), TEST_ECONOMY).earned).toBe(40);
+    expect(arrive(run, quietTrip(run), 0, sequence(0), TEST_ECONOMY).run.cargo).toEqual([open]);
   });
 
   it("adds every delivered contract to your reputation", () => {
-    const run = testRun({ delivered: 4, cargo: [CONTRACT("A", 1), CONTRACT("B", 1)] });
-    expect(arrive(run, quietTrip(run), sequence(0), TEST_ECONOMY).run.delivered).toBe(6);
+    const run = testRun({ delivered: 4, cargo: [CONTRACT("A", 1), CONTRACT("B", 1), CONTRACT("C", 1, 10, { from: 0, to: 2 })] });
+    expect(arrive(run, quietTrip(run), 1, sequence(0), TEST_ECONOMY).run.delivered).toBe(6);
   });
 
   it("adds the pay to the cargo sold score", () => {
     const run = testRun({ cargoEarned: 9, cargo: [CONTRACT("A", 4, 10)] });
-    expect(arrive(run, quietTrip(run), sequence(0), TEST_ECONOMY).run.cargoEarned).toBe(49);
+    expect(arrive(run, quietTrip(run), 1, sequence(0), TEST_ECONOMY).run.cargoEarned).toBe(49);
   });
 
   it("counts a trip flown at top danger toward the boss", () => {
     const danger = { valueCheckpoints: [100], dropBuffer: 0, killsPerTier: 9, levels: [[], []], boss: NO_BOSS };
     const run = testRun({ topTrips: 4 });
-    expect(arrive(run, { ...quietTrip(run), danger: 2 }, sequence(0), TEST_ECONOMY, danger).run.topTrips).toBe(5);
+    expect(arrive(run, { ...quietTrip(run), danger: 2 }, 1, sequence(0), TEST_ECONOMY, danger).run.topTrips).toBe(5);
   });
 
   it("doesn't count a trip flown below top danger", () => {
     const danger = { valueCheckpoints: [100], dropBuffer: 0, killsPerTier: 9, levels: [[], []], boss: NO_BOSS };
     const run = testRun({ topTrips: 4 });
-    expect(arrive(run, { ...quietTrip(run), danger: 1 }, sequence(0), TEST_ECONOMY, danger).run.topTrips).toBe(4);
+    expect(arrive(run, { ...quietTrip(run), danger: 1 }, 1, sequence(0), TEST_ECONOMY, danger).run.topTrips).toBe(4);
   });
 
   it("keeps what the flight changed", () => {
     const run = testRun({ kills: 9 });
-    const result = arrive(run, { ...quietTrip(run), fuel: 9, bounty: 99, kills: 2 }, sequence(0), TEST_ECONOMY);
+    const result = arrive(run, { ...quietTrip(run), fuel: 9, bounty: 99, kills: 2 }, 1, sequence(0), TEST_ECONOMY);
     expect(result.run.fuel).toBe(9);
     expect(result.run.money).toBe(1099);
     expect(result.run.kills).toBe(11);

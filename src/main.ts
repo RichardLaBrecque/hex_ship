@@ -1,4 +1,5 @@
 import { Sound } from "./audio/sound";
+import { PLANETS } from "./data/balance";
 import { afterFlight, arrive, launch, newRun, towBack, type Run } from "./economy/run";
 import { Input } from "./engine/input";
 import { startLoop } from "./engine/loop";
@@ -63,10 +64,15 @@ function startTrip(docked: Run): void {
     new FlightScene({
       run: flying,
       sound,
-      onArrive: (trip) => {
+      onArrive: (trip, planet) => {
         sound.dock();
-        const { run, delivered, earned } = arrive(flying, trip);
-        const report = delivered.length > 0 ? `Delivered ${delivered.length} contract(s): +$${earned}` : "Arrived with an empty hold.";
+        const { run, delivered, earned } = arrive(flying, trip, planet);
+        const report =
+          delivered.length > 0
+            ? `Delivered ${delivered.length} contract(s): +$${earned}`
+            : run.cargo.length > 0
+              ? `No cargo bound for ${PLANETS[planet].name}.`
+              : "Arrived with an empty hold.";
         openStation(run, withBounty(report, trip.bounty));
       },
       onAbort: (trip) =>

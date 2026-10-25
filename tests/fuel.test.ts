@@ -5,7 +5,7 @@ import type { Outcome, Run } from "../src/economy/run";
 import { sellPart } from "../src/economy/shop";
 import { hex } from "../src/hex/hex";
 import { placePart, type Ship } from "../src/ship/ship";
-import { burnFuel, tripFuelEstimate } from "../src/sim/fuel";
+import { burnFuel, fuelRange, tripFuelEstimate } from "../src/sim/fuel";
 import { TEST_PARTS } from "./catalog";
 
 const TEST_ECONOMY: Economy = {
@@ -20,6 +20,9 @@ const TEST_ECONOMY: Economy = {
   offersPerStation: 1,
   payBonusPerDelivery: 0,
   topTierShare: 1,
+  openShare: 0,
+  openPayShare: 0,
+  payDistance: 1,
   contractTiers: [{ rank: "ONLY", unlockAt: 0, units: { min: 1, max: 1 }, pay: { min: 1, max: 1 } }],
   bountyShare: 0,
 };
@@ -69,6 +72,22 @@ describe("tripFuelEstimate", () => {
 
   it("is infinite for a ship that can't move", () => {
     expect(tripFuelEstimate({ acceleration: 0, fuelBurn: 3 }, 400, TUNING)).toBe(Infinity);
+  });
+});
+
+describe("fuelRange", () => {
+  it("is the farthest trip tripFuelEstimate says the fuel covers", () => {
+    // top speed 40; 36 units at 3 units/s is 12 s, less 2 s spin-up → 10 s × 40 = 400 px
+    expect(fuelRange({ acceleration: 2, fuelBurn: 3 }, 36, TUNING)).toBe(400);
+    expect(tripFuelEstimate({ acceleration: 2, fuelBurn: 3 }, 400, TUNING)).toBe(36);
+  });
+
+  it("is 0 when the fuel can't even get up to speed", () => {
+    expect(fuelRange({ acceleration: 2, fuelBurn: 3 }, 5, TUNING)).toBe(0);
+  });
+
+  it("is 0 for a ship that can't move", () => {
+    expect(fuelRange({ acceleration: 0, fuelBurn: 3 }, 36, TUNING)).toBe(0);
   });
 });
 

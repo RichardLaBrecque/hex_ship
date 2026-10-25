@@ -80,7 +80,8 @@ export const BOSS: EnemyTier = {
   aimError: 3,
 };
 
-// One encounter: when it triggers along the route, and the tier (1-based) of each enemy in it, plus the boss if `boss`.
+// One encounter: when it triggers, and the tier (1-based) of each enemy in it, plus the boss if `boss`.
+// `at` is how far out the ship is, as a share of the distance from the planet it left to that planet's nearest neighbour.
 export type Encounter = { at: number; enemies: readonly number[]; boss?: boolean };
 
 // Danger tier = the higher of a ship-value tier and a notoriety (kills) tier.

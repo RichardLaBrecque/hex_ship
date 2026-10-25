@@ -15,9 +15,12 @@ import { seeded } from "./random";
 // Design rules checked against the real balance numbers. If one fails after a rebalance,
 // either the numbers or the rule needs to change on purpose.
 describe("balance", () => {
-  it("one full tank flies the starter ship twice the distance between the planets", () => {
+  it("one full tank flies the starter ship twice the distance from any planet to its nearest neighbour", () => {
     const stats = computeShipStats(starterShip(), Infinity);
-    const planetGap = Math.hypot(PLANETS[1].x - PLANETS[0].x, PLANETS[1].y - PLANETS[0].y);
+    const nearest = PLANETS.map((a) =>
+      Math.min(...PLANETS.filter((b) => b !== a).map((b) => Math.hypot(b.x - a.x, b.y - a.y))),
+    );
+    const planetGap = Math.max(...nearest);
 
     let body: Body = { x: 0, y: 0, vx: 0, vy: 0, angle: 0, spin: 0 };
     let fuel = stats.fuelCapacity;

@@ -1,10 +1,10 @@
 import { COMBAT, ECONOMY, FLIGHT, PLANETS } from "../data/balance";
 import { BUILDABLE, PARTS, type PartId } from "../data/parts";
-import { cargoUnits, contractPay, loadContract, reputation, unloadContract, type Contract } from "../economy/contracts";
+import { cargoUnits, contractPay, loadContract, planetDistance, reputation, unloadContract, type Contract } from "../economy/contracts";
 import { fireCrew, hireCrew, hiringFees, wages } from "../economy/crew";
 import { dangerOutlook, type DangerOutlook } from "../economy/danger";
 import { refuel, refuelCost } from "../economy/fuel";
-import { destination, expectedPay, launchCost, launchProblems, tripDistance, type Outcome, type Run } from "../economy/run";
+import { launchCost, launchProblems, payAt, type Outcome, type Run } from "../economy/run";
 import { buyPart, repairAll, repairCost, sellPart, sellValue } from "../economy/shop";
 import type { Input } from "../engine/input";
 import type { Scene } from "../engine/scene";
@@ -14,11 +14,11 @@ import { drawHex } from "../render/drawHex";
 import { muteButtonRect } from "../render/muteButton";
 import { drawFiringArc, drawPart, drawShip } from "../render/drawShip";
 import { STATION_TABS, touchStationLayout, type StationTab } from "../render/stationLayout";
-import { drawButton, drawPanel, drawText, pointInRect, THEME, wrapText, type Rect, type TextStyle } from "../render/ui";
+import { drawButton, drawPanel, drawText, fitText, pointInRect, THEME, wrapText, type Rect, type TextStyle } from "../render/ui";
 import { partAt, rotatePart, shipValue, type PlacedPart } from "../ship/ship";
 import { computeShipStats, type ShipStats } from "../ship/stats";
 import { validateShip, type Validation } from "../ship/validate";
-import { tripFuelEstimate } from "../sim/fuel";
+import { fuelRange } from "../sim/fuel";
 import { thrustSpin } from "../sim/physics";
 
 const MAX_HEX_SIZE = 28;
@@ -58,7 +58,7 @@ export class StationScene implements Scene {
   private validation: Validation;
   private problems: string[];
   private launchCost: number;
-  private tripFuel: number;
+  private range: number; // how far the fuel aboard flies the ship (see fuelRange)
 
   private grid = new Set(hexesInRadius(GRID_RADIUS).map(hexKey));
   // The part type being built with, or null for inspect mode (click a placed part to select it).
@@ -111,7 +111,7 @@ export class StationScene implements Scene {
     this.validation = validateShip(this.run.ship);
     this.problems = launchProblems(this.run);
     this.launchCost = launchCost(this.run);
-    this.tripFuel = tripFuelEstimate(this.stats, tripDistance(this.run));
+    this.range = fuelRange(this.stats, this.run.fuel);
     if (options.report) this.flash(options.report, THEME.good, REPORT_SECONDS);
   }
 
@@ -296,7 +296,7 @@ export class StationScene implements Scene {
     this.validation = validateShip(run.ship);
     this.problems = launchProblems(run);
     this.launchCost = launchCost(run);
-    this.tripFuel = tripFuelEstimate(this.stats, tripDistance(run));
+    this.range = fuelRange(this.stats, run.fuel);
     this.options.onChange(run);
   }
 
@@ -467,7 +467,7 @@ export class StationScene implements Scene {
     const loaded = cargoUnits(this.run.cargo);
     const capacity = this.stats.cargoCapacity;
     const left = body.x + 10;
-    drawText(ctx, `To ${PLANETS[destination(this.run)].name}  ·  Hold ${loaded} / ${capacity} units`, left, body.y + 12, {
+    drawText(ctx, `Hold ${loaded} / ${capacity} units`, left, body.y + 12, {
       bold: true,
       color: loaded > capacity ? THEME.bad : THEME.text,
     });
@@ -719,13 +719,13 @@ export class StationScene implements Scene {
     // Fuel
     drawText(ctx, "FUEL", left, y, { bold: true, color: THEME.muted });
     y += 24;
-    const lowFuel = this.run.fuel < this.tripFuel;
+    const reachable = this.reachable().length;
+    const lowFuel = reachable === 0;
     this.statRow(ctx, column, "Tanks", `${Math.floor(this.run.fuel)} / ${s.fuelCapacity} units`, y, lowFuel ? THEME.warn : THEME.text);
     y += 20;
     this.statRow(ctx, column, "Burn at full thrust", `${fmt(s.fuelBurn, 1)} / s`, y);
     y += 20;
-    const estimate = Number.isFinite(this.tripFuel) ? `~${this.tripFuel} units` : "—";
-    this.statRow(ctx, column, "Trip needs (est.)", estimate, y, lowFuel ? THEME.warn : THEME.text);
+    this.statRow(ctx, column, "Reaches (est.)", `${reachable} of ${PLANETS.length - 1} planets`, y, lowFuel ? THEME.warn : THEME.text);
     y += 14;
     const refuelPrice = refuelCost(this.run);
     this.refuelButton = refuelPrice > 0 ? { x: left, y, w: right - left, h: 26 } : NO_RECT;
@@ -759,14 +759,18 @@ export class StationScene implements Scene {
     return y;
   }
 
-  // The trip's costs and what stops a launch, starting at `top` and stopping before `bottom`. Returns the y below it.
+  // Planets other than this one that the fuel aboard reaches, by the same estimate as the refuel advice.
+  private reachable(): number[] {
+    return PLANETS.map((_, i) => i).filter((i) => i !== this.run.docked && planetDistance(this.run.docked, i) <= this.range);
+  }
+
+  // Launch costs, a map of where the cargo is bound, and what stops a launch, starting at `top` and stopping before `bottom`.
+  // Returns the y below it.
   private renderTripSection(ctx: CanvasRenderingContext2D, column: Column, top: number, bottom: number): number {
     const { left, right } = column;
     let y = top;
-    drawText(ctx, `TRIP TO ${PLANETS[destination(this.run)].name.toUpperCase()}`, left, y, { bold: true, color: THEME.muted });
+    drawText(ctx, "TRIP", left, y, { bold: true, color: THEME.muted });
     y += 24;
-    const pay = expectedPay(this.run);
-    const fuelCost = Number.isFinite(this.tripFuel) ? Math.ceil(this.tripFuel * ECONOMY.fuelPrice) : 0;
     this.statRow(ctx, column, "Crew wages", `−$${wages(this.run.crew)}`, y);
     y += 20;
     const fees = hiringFees(this.run);
@@ -774,13 +778,16 @@ export class StationScene implements Scene {
       this.statRow(ctx, column, `Hiring ${this.run.crew - this.run.crewSigned} new crew`, `−$${fees}`, y);
       y += 20;
     }
-    this.statRow(ctx, column, "Fuel used (est.)", `−$${fuelCost}`, y);
-    y += 20;
-    this.statRow(ctx, column, "Cargo pay", `+$${pay}`, y, THEME.good);
-    y += 20;
-    const profit = pay - this.launchCost - fuelCost;
-    this.statRow(ctx, column, "Trip profit", `${profit >= 0 ? "+" : "−"}$${Math.abs(profit)}`, y, profit >= 0 ? THEME.good : THEME.bad);
-    y += 24;
+    const aboard = this.run.cargo.reduce((sum, c) => sum + contractPay(c), 0);
+    this.statRow(ctx, column, "Cargo aboard", `$${aboard}`, y, aboard > 0 ? THEME.good : THEME.text);
+    y += 14;
+    const mapHeight = Math.min(150, bottom - y - (this.problems.length > 0 ? 40 : 24));
+    if (mapHeight > 60) {
+      this.renderStarMap(ctx, { x: left, y, w: right - left, h: mapHeight });
+      y += mapHeight + 16;
+    } else {
+      y += 10;
+    }
 
     if (this.problems.length === 0) {
       drawText(ctx, "✓ Ready to launch", left, y, { color: THEME.good, bold: true });
@@ -796,6 +803,62 @@ export class StationScene implements Scene {
       }
     }
     return y;
+  }
+
+  // Every planet, stretched to fill `area`. This one is ringed in white, planets the fuel reaches sit inside the dashed
+  // range ellipse (the range circle, stretched the same way), and planets with cargo bound for them are ringed in green with what docking there pays
+  // (open cargo included). Open cargo alone doesn't ring a planet, since it goes anywhere.
+  private renderStarMap(ctx: CanvasRenderingContext2D, area: Rect): void {
+    ctx.fillStyle = "#0b1120";
+    ctx.fillRect(area.x, area.y, area.w, area.h);
+    const pad = { x: 34, y: 14 }; // room for names either side of the planets at the edges
+    const xs = PLANETS.map((p) => p.x);
+    const ys = PLANETS.map((p) => p.y);
+    const [minX, minY] = [Math.min(...xs), Math.min(...ys)];
+    const scaleX = (area.w - 2 * pad.x) / (Math.max(...xs) - minX);
+    const scaleY = (area.h - 2 * pad.y - 10) / (Math.max(...ys) - minY);
+    const at = (p: Point): Point => ({ x: area.x + pad.x + (p.x - minX) * scaleX, y: area.y + pad.y + (p.y - minY) * scaleY });
+
+    const here = PLANETS[this.run.docked];
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(area.x, area.y, area.w, area.h);
+    ctx.clip();
+    if (Number.isFinite(this.range) && this.range > 0) {
+      ctx.setLineDash([4, 4]);
+      ctx.strokeStyle = THEME.accent;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.ellipse(at(here).x, at(here).y, this.range * scaleX, this.range * scaleY, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    PLANETS.forEach((planet, i) => {
+      const p = at(planet);
+      const bound = this.run.cargo.some((c) => c.to === i);
+      const pay = bound ? payAt(this.run, i) : 0;
+      const ring = i === this.run.docked ? THEME.text : bound ? THEME.good : null;
+      if (ring) {
+        ctx.strokeStyle = ring;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 7, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      ctx.fillStyle = planet.color;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
+      ctx.fill();
+      // A short map has room for one line under each planet, so the pay goes beside the name.
+      const style: TextStyle = { align: "center", size: 11, bold: bound, color: bound ? THEME.good : THEME.muted };
+      if (area.h < 110) {
+        drawText(ctx, bound ? `${planet.name} $${pay}` : planet.name, p.x, p.y + 13, style);
+      } else {
+        drawText(ctx, planet.name, p.x, p.y + 15, style);
+        if (bound) drawText(ctx, `$${pay}`, p.x, p.y + 27, style);
+      }
+    });
+    ctx.restore();
   }
 
   private renderLaunchButton(ctx: CanvasRenderingContext2D): void {
@@ -857,7 +920,7 @@ export class StationScene implements Scene {
   private renderContractBoard(ctx: CanvasRenderingContext2D, area: Rect): void {
     const loaded = cargoUnits(this.run.cargo);
     const capacity = this.stats.cargoCapacity;
-    drawText(ctx, `CONTRACTS TO ${PLANETS[destination(this.run)].name.toUpperCase()}`, area.x, area.y, {
+    drawText(ctx, "CONTRACTS", area.x, area.y, {
       bold: true,
       color: THEME.muted,
     });
@@ -874,7 +937,9 @@ export class StationScene implements Scene {
       color: loaded > capacity ? THEME.bad : THEME.text,
     });
 
-    this.renderContractCards(ctx, { x: area.x, y: area.y + 16, w: area.w, h: area.h - 16 }, this.run.cargo.length + this.run.offers.length);
+    // One row of up to five cards; more wrap onto a second row of short cards.
+    const count = this.run.cargo.length + this.run.offers.length;
+    this.renderContractCards(ctx, { x: area.x, y: area.y + 16, w: area.w, h: area.h - 16 }, count > 5 ? Math.ceil(count / 2) : Math.max(1, count));
   }
 
   // Loaded contracts first, then the rest of the board, in rows of `columns` cards filling `area`.
@@ -899,8 +964,6 @@ export class StationScene implements Scene {
       rect: { x: area.x + (i % columns) * (cardWidth + gap), y: area.y + Math.floor(i / columns) * (cardHeight + gap), w: cardWidth, h: cardHeight },
     }));
 
-    // Touch cards are shorter, so their lines sit closer together.
-    const [nameY, unitsY, payY, paySize] = this.touch ? [16, 34, 56, 18] : [20, 44, 72, 20];
     for (const { rect, contract, loaded: isLoaded } of this.contractCards) {
       const fits = isLoaded || contract.units <= capacity - loaded;
       const hovered = pointInRect(this.mouse, rect);
@@ -910,16 +973,82 @@ export class StationScene implements Scene {
       ctx.lineWidth = isLoaded ? 2 : 1;
       ctx.strokeRect(rect.x + 0.5, rect.y + 0.5, rect.w - 1, rect.h - 1);
 
-      const x = rect.x + 12;
-      const faded = fits ? THEME.text : THEME.muted;
-      drawText(ctx, contract.cargo, x, rect.y + nameY, { bold: true, color: faded });
-      drawText(ctx, `T${contract.tier + 1}`, rect.x + rect.w - 12, rect.y + nameY, { align: "right", bold: true, size: 12, color: THEME.accent });
-      drawText(ctx, `${contract.units} units × $${contract.payPerUnit}`, x, rect.y + unitsY, { color: THEME.muted, size: 12 });
-      drawText(ctx, `$${contractPay(contract)}`, x, rect.y + payY, { size: paySize, bold: true, color: fits ? THEME.good : THEME.muted });
       const tap = this.touch ? "tap" : "click";
-      const footer = isLoaded ? `LOADED · ${tap} to unload` : fits ? `${this.touch ? "Tap" : "Click"} to load` : "Not enough hold space";
-      drawText(ctx, footer, x, rect.y + rect.h - (this.touch ? 10 : 14), { size: 11, color: isLoaded ? THEME.good : fits ? THEME.muted : THEME.bad });
+      // Cargo loaded at another planet can't come off until it reaches where it's bound.
+      const [footer, status] = !isLoaded
+        ? fits
+          ? [`${this.touch ? "Tap" : "Click"} to load`, ""]
+          : ["Not enough hold space", "NO ROOM"]
+        : contract.from === this.run.docked
+          ? [`LOADED · ${tap} to unload`, "LOADED"]
+          : [`ABOARD · from ${PLANETS[contract.from].name}`, "ABOARD"];
+      this.renderContractCard(ctx, rect, contract, {
+        footer,
+        status,
+        footerColor: isLoaded ? THEME.good : fits ? THEME.muted : THEME.bad,
+        textColor: fits ? THEME.text : THEME.muted,
+        payColor: fits ? THEME.good : THEME.muted,
+      });
     }
+  }
+
+  // One contract's name, tier, route, pay and `footer`, laid out tighter on short cards. The shortest cards drop
+  // the tier and show `status` in place of the footer. Text is cut to fit the card.
+  private renderContractCard(
+    ctx: CanvasRenderingContext2D,
+    rect: Rect,
+    contract: Contract,
+    colors: { footer: string; status: string; footerColor: string; textColor: string; payColor: string },
+  ): void {
+    const x = rect.x + 10;
+    const inner = rect.w - 20;
+    const bound = contract.to === null ? "any planet" : PLANETS[contract.to].name;
+    const route = `${contract.units} × $${contract.payPerUnit} → ${bound}`;
+    const pay = `$${contractPay(contract)}`;
+    const tier = `T${contract.tier + 1}`;
+    const tierStyle: TextStyle = { align: "right", bold: true, size: 12, color: THEME.accent };
+    const nameStyle: TextStyle = { bold: true, color: colors.textColor };
+    const routeStyle: TextStyle = { color: THEME.muted, size: 12 };
+    const footerStyle: TextStyle = { size: 11, color: colors.footerColor };
+    const right = rect.x + rect.w - 10;
+
+    if (rect.h < 50) {
+      // Two lines: name and pay, then route and status.
+      const payStyle: TextStyle = { align: "right", bold: true, color: colors.payColor };
+      const statusStyle: TextStyle = { ...footerStyle, align: "right", bold: true };
+      const top = rect.y + 12;
+      const bottom = rect.y + rect.h - 11;
+      drawText(ctx, pay, right, top, payStyle);
+      ctx.font = "600 13px system-ui, sans-serif";
+      drawText(ctx, fitText(ctx, contract.cargo, inner - ctx.measureText(pay).width - 6, nameStyle), x, top, nameStyle);
+      drawText(ctx, colors.status, right, bottom, statusStyle);
+      ctx.font = "600 11px system-ui, sans-serif";
+      const statusWidth = colors.status ? ctx.measureText(colors.status).width + 6 : 0;
+      // Destination first, so a narrow card cuts the numbers rather than where it's going.
+      const shortRoute = `→ ${bound} · ${contract.units} × $${contract.payPerUnit}`;
+      drawText(ctx, fitText(ctx, shortRoute, inner - statusWidth, routeStyle), x, bottom, routeStyle);
+      return;
+    }
+    drawText(ctx, tier, right, rect.y + 14, tierStyle);
+    ctx.font = "600 12px system-ui, sans-serif";
+    const nameWidth = inner - ctx.measureText(tier).width - 6;
+
+    if (rect.h < 80) {
+      // Short card: route and pay share a line.
+      const payStyle: TextStyle = { align: "right", bold: true, color: colors.payColor };
+      drawText(ctx, fitText(ctx, contract.cargo, nameWidth, nameStyle), x, rect.y + 14, nameStyle);
+      drawText(ctx, pay, rect.x + rect.w - 10, rect.y + 31, payStyle);
+      ctx.font = "600 13px system-ui, sans-serif";
+      const routeWidth = inner - ctx.measureText(pay).width - 6;
+      drawText(ctx, fitText(ctx, route, routeWidth, routeStyle), x, rect.y + 31, routeStyle);
+      drawText(ctx, fitText(ctx, colors.footer, inner, footerStyle), x, rect.y + rect.h - 9, footerStyle);
+      return;
+    }
+    const [routeY, payY, paySize] = this.touch ? [34, 56, 18] : [40, 66, 20];
+    drawText(ctx, fitText(ctx, contract.cargo, nameWidth, nameStyle), x, rect.y + 14, nameStyle);
+    drawText(ctx, fitText(ctx, route, inner, routeStyle), x, rect.y + routeY, routeStyle);
+    drawText(ctx, pay, x, rect.y + payY, { size: paySize, bold: true, color: colors.payColor });
+    drawText(ctx, fitText(ctx, colors.footer, inner, footerStyle), x, rect.y + rect.h - (this.touch ? 10 : 14), footerStyle);
   }
 
   private toScreen(h: Hex): Point {

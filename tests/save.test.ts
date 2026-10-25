@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { Contract } from "../src/economy/contracts";
 import type { Run } from "../src/economy/run";
 import { hex } from "../src/hex/hex";
 import { clearRun, loadRun, SAVE_KEY, SAVE_VERSION, saveRun } from "../src/save/save";
@@ -19,8 +20,8 @@ const testRun = (): Run => ({
   crewSigned: 2,
   fuel: 19,
   docked: 1,
-  offers: [{ id: "9-0", cargo: "ORE", units: 9, payPerUnit: 19, tier: 1 }],
-  cargo: [{ id: "9-1", cargo: "ICE", units: 4, payPerUnit: 29, tier: 0 }],
+  offers: [{ id: "9-0", cargo: "ORE", units: 9, payPerUnit: 19, tier: 1, from: 1, to: 6 }],
+  cargo: [{ id: "9-1", cargo: "ICE", units: 4, payPerUnit: 29, tier: 0, from: 4, to: null }],
   delivered: 9,
   kills: 4,
   valueTier: 2,
@@ -49,11 +50,35 @@ describe("saveRun / loadRun", () => {
     expect(loadRun(store, TEST_PARTS)).toBeNull();
   });
 
+  // Before version 3 there were two planets, and every contract ran from the docked planet to the other one.
+  const twoPlanetRun = () => {
+    const { offers, cargo, ...rest } = testRun();
+    const unrouted = ({ from: _, to: __, ...c }: Contract) => c;
+    return { ...rest, ship: [...rest.ship.values()], offers: offers.map(unrouted), cargo: cargo.map(unrouted) };
+  };
+  const routedTwoPlanet = (run: Run): Run => ({
+    ...run,
+    offers: run.offers.map((c) => ({ ...c, from: 1, to: 0 })),
+    cargo: run.cargo.map((c) => ({ ...c, from: 1, to: 0 })),
+  });
+
+  it("loads a version 2 save with every contract bound for the other planet", () => {
+    const store = memoryStore();
+    store.set(SAVE_KEY, JSON.stringify({ version: 2, run: twoPlanetRun() }));
+    expect(loadRun(store, TEST_PARTS)).toEqual(routedTwoPlanet(testRun()));
+  });
+
   it("loads a version 1 save, from before boss trips, as no top-danger trips yet", () => {
     const store = memoryStore();
-    const { topTrips: _, ...older } = testRun();
-    store.set(SAVE_KEY, JSON.stringify({ version: 1, run: { ...older, ship: [...older.ship.values()] } }));
-    expect(loadRun(store, TEST_PARTS)).toEqual({ ...testRun(), topTrips: 0 });
+    const { topTrips: _, ...older } = twoPlanetRun();
+    store.set(SAVE_KEY, JSON.stringify({ version: 1, run: older }));
+    expect(loadRun(store, TEST_PARTS)).toEqual({ ...routedTwoPlanet(testRun()), topTrips: 0 });
+  });
+
+  it("ignores a save docked at a planet that doesn't exist", () => {
+    const store = memoryStore();
+    saveRun({ ...testRun(), docked: 99 }, store);
+    expect(loadRun(store, TEST_PARTS)).toBeNull();
   });
 
   it("ignores a save that isn't JSON", () => {
