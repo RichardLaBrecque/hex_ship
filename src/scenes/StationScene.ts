@@ -17,6 +17,7 @@ import { fireCrew, hireCrew, hiringFees, wages } from "../economy/crew";
 import { dangerOutlook, type DangerOutlook } from "../economy/danger";
 import { refuel, refuelCost } from "../economy/fuel";
 import { launchCost, launchProblems, payAt, type Outcome, type Run } from "../economy/run";
+import { installSalvage, sellSalvage, type Salvage } from "../economy/salvage";
 import { buyPart, repairAll, repairCost, saleProceeds, sellPart, sellValue } from "../economy/shop";
 import type { Input } from "../engine/input";
 import type { Scene } from "../engine/scene";
@@ -75,6 +76,8 @@ export class StationScene implements Scene {
   private grid = new Set(hexesInRadius(GRID_RADIUS).map(hexKey));
   // The part type being built with, or null for inspect mode (click a placed part to select it).
   private tool: PartId | null = null;
+  // The index into run.salvage of the part being installed, built with in place of the tool. Null when not installing.
+  private installing: number | null = null;
   private inspected: Hex | null = null;
   // On touch, building takes two taps: the first puts a ghost of the part here, the second buys it.
   private pending: Hex | null = null;
@@ -105,6 +108,7 @@ export class StationScene implements Scene {
   private gridCenter: Point = { x: 0, y: 0 };
   private paletteRows: Rect[] = [];
   private contractCards: { rect: Rect; contract: Contract; loaded: boolean }[] = [];
+  private salvageButtons: { rect: Rect; index: number; action: "install" | "sell" }[] = [];
   private hireButton = NO_RECT;
   private fireButton = NO_RECT;
   private repairButton = NO_RECT;
@@ -164,6 +168,7 @@ export class StationScene implements Scene {
   // Picking the active tool again puts it away.
   private pickTool(id: PartId): void {
     this.tool = this.tool === id ? null : id;
+    this.installing = null;
     this.inspected = null;
     this.pending = null;
   }
@@ -171,20 +176,53 @@ export class StationScene implements Scene {
   // Puts the tool away, or lets go of the selected part.
   private deselect(): void {
     this.tool = null;
+    this.installing = null;
     this.inspected = null;
     this.pending = null;
   }
 
+  // The part type being placed: the salvage being installed, else the tool.
+  private building(): PartId | null {
+    return this.installing !== null ? this.installingSalvage().type : this.tool;
+  }
+
+  private installingSalvage(): Salvage {
+    return this.run.salvage[this.installing!];
+  }
+
+  // Building with salvage installs it for free, and it's used up; building with the tool buys a new part.
   private buyAt(h: Hex): void {
-    if (!this.tool) return;
-    this.apply(buyPart(this.run, h, this.tool, this.rotations[this.tool]));
+    const type = this.building();
+    if (!type) return;
+    if (this.installing !== null) {
+      const outcome = installSalvage(this.run, this.installing, h, this.rotations[type]);
+      this.apply(outcome);
+      if (outcome.ok) this.installing = null;
+    } else {
+      this.apply(buyPart(this.run, h, type, this.rotations[type]));
+    }
     this.pending = null;
+  }
+
+  // Selling shifts the salvage after it along, so whatever was being installed is put away.
+  private salvageAction(index: number, action: "install" | "sell"): void {
+    this.pending = null;
+    this.inspected = null;
+    if (action === "sell") {
+      this.installing = null;
+      this.apply(sellSalvage(this.run, index));
+      return;
+    }
+    this.tool = null;
+    this.installing = this.installing === index ? null : index;
+    this.tab = "parts";
   }
 
   // Turns the tool's next part, or the selected part, one step clockwise (step 1) or anticlockwise (step -1).
   private rotate(step: number): void {
-    if (this.tool) {
-      this.rotations[this.tool] = mod6(this.rotations[this.tool] + step);
+    const type = this.building();
+    if (type) {
+      this.rotations[type] = mod6(this.rotations[type] + step);
     } else if (this.inspected) {
       this.rotateInspected(step);
     }
@@ -220,6 +258,11 @@ export class StationScene implements Scene {
     const row = this.paletteRows.findIndex((r) => pointInRect(this.mouse, r));
     if (row >= 0) {
       this.pickTool(BUILDABLE[row]);
+      return;
+    }
+    const salvageButton = this.salvageButtons.find((b) => pointInRect(this.mouse, b.rect));
+    if (salvageButton) {
+      this.salvageAction(salvageButton.index, salvageButton.action);
       return;
     }
     const card = this.contractCards.find((c) => pointInRect(this.mouse, c.rect));
@@ -272,7 +315,7 @@ export class StationScene implements Scene {
       this.deselect();
       return;
     }
-    if (!this.tool) {
+    if (!this.building()) {
       this.inspected = this.hovered && partAt(this.run.ship, this.hovered) ? this.hovered : null;
       if (this.inspected) this.tab = "parts";
       return;
@@ -370,6 +413,7 @@ export class StationScene implements Scene {
     // Only what this render draws can be clicked.
     this.paletteRows = [];
     this.contractCards = [];
+    this.salvageButtons = [];
     this.tabButtons = [];
     this.hireButton = this.fireButton = this.repairButton = this.refuelButton = this.launchButton = NO_RECT;
     this.rotateLeftButton = this.rotateRightButton = this.sellButton = this.placeButton = this.doneButton = NO_RECT;
@@ -395,7 +439,9 @@ export class StationScene implements Scene {
     this.renderSidePanel(ctx, width, height);
     this.renderContractBoard(ctx, { x: centerLeft, y: height - BOARD_HEIGHT - 36, w: centerRight - centerLeft, h: BOARD_HEIGHT });
 
-    const help = this.tool
+    const help = this.installing !== null
+      ? "Left-click install · R / Shift+R rotate · Esc stop installing"
+      : this.tool
       ? "Left-click buy & place · Right-click sell · R / Shift+R rotate · Esc or click part again to stop building"
       : "Click a part to select it · R / Shift+R rotate · Del sell · 1-8 pick a part to build";
     drawText(ctx, help, this.gridCenter.x, height - 18, { align: "center", color: THEME.muted, size: 12 });
@@ -475,7 +521,7 @@ export class StationScene implements Scene {
   // Part tiles to build with; while building or with a part selected, its details and what you can do with it.
   private renderTouchParts(ctx: CanvasRenderingContext2D, body: Rect): void {
     const pad = 6;
-    if (this.tool || this.inspectedPart()) {
+    if (this.building() || this.inspectedPart()) {
       const actions = { x: body.x + pad, y: body.y + body.h - pad - 30, w: body.w - 2 * pad, h: 30 };
       this.renderPartInfo(ctx, body.x + 10, body.y + 12, body.w - 20, actions.y - 8);
       this.renderActionBar(ctx, actions);
@@ -560,9 +606,10 @@ export class StationScene implements Scene {
       this.drawBlockedMarker(ctx, this.toScreen(neighbor(engine.hex, engine.rotation)));
     }
 
-    if (this.tool) {
+    const building = this.building();
+    if (building) {
       const ghost = this.touch ? this.pending : this.hovered;
-      if (ghost) this.renderGhost(ctx, this.tool, ghost);
+      if (ghost) this.renderGhost(ctx, building, ghost);
       return;
     }
     const hoveredPart = this.hovered ? partAt(this.run.ship, this.hovered) : undefined;
@@ -603,12 +650,14 @@ export class StationScene implements Scene {
     const rotation = this.rotations[tool];
     this.renderPartGuides(ctx, tool, h, rotation);
 
+    // Salvage shows the damage it comes with, and is free to install.
+    const salvage = this.installing !== null ? this.installingSalvage() : null;
     ctx.save();
     ctx.translate(this.gridCenter.x, this.gridCenter.y);
     ctx.globalAlpha = 0.6;
-    drawPart(ctx, { hex: h, type: tool, rotation, hp: def.maxHp }, this.hexSize, false);
+    drawPart(ctx, { hex: h, type: tool, rotation, hp: salvage?.hp ?? def.maxHp }, this.hexSize, false);
     ctx.restore();
-    const affordable = this.run.money + (existing ? sellValue(existing) : 0) >= def.cost || existing?.type === tool;
+    const affordable = salvage !== null || this.run.money + (existing ? sellValue(existing) : 0) >= def.cost || existing?.type === tool;
     drawHex(ctx, p, this.hexSize - 1, { stroke: affordable ? THEME.accent : THEME.bad, lineWidth: 2 });
   }
 
@@ -666,7 +715,8 @@ export class StationScene implements Scene {
       y += height;
     };
     const shown = this.inspectedPart() ?? (this.hovered ? partAt(this.run.ship, this.hovered) : undefined);
-    const type = this.tool ?? shown?.type;
+    const building = this.building();
+    const type = building ?? shown?.type;
     if (!type) {
       line("Nothing selected", { bold: true, color: THEME.muted }, 20);
       for (const lineText of wrapText(ctx, "Click a part on the ship to select it, or pick one above to build.", textWidth)) {
@@ -676,13 +726,18 @@ export class StationScene implements Scene {
     }
 
     const def = PARTS[type];
-    const title = this.tool ? `Building: ${def.name}` : this.inspected ? `Selected: ${def.name}` : def.name;
+    const title =
+      this.installing !== null ? `Installing: ${def.name}` : this.tool ? `Building: ${def.name}` : this.inspected ? `Selected: ${def.name}` : def.name;
     line(title, { bold: true, color: def.color }, 20);
     for (const lineText of wrapText(ctx, def.description, textWidth)) {
       line(lineText, { color: THEME.muted }, 17);
     }
     y += 6;
-    if (!this.tool && shown) {
+    if (this.installing !== null) {
+      const { hp } = this.installingSalvage();
+      line(`Salvage · HP ${fmt(hp)} / ${def.maxHp} · free to install`, { size: 12, color: hp < def.maxHp ? THEME.warn : THEME.good }, 16);
+    }
+    if (!building && shown) {
       line(`HP ${shown.hp} / ${def.maxHp}`, { size: 12, color: shown.hp < def.maxHp ? THEME.warn : THEME.text }, 16);
       if (usesRotation(shown.type)) {
         const label = shown.type === "engine" ? "Exhaust points" : "Facing";
@@ -937,7 +992,8 @@ export class StationScene implements Scene {
   // The keyboard's R, Shift+R, Del and Esc as four buttons across `row`, shown while building or with a part selected.
   private renderActionBar(ctx: CanvasRenderingContext2D, row: Rect): void {
     const inspected = this.inspectedPart();
-    const active = this.tool ?? inspected?.type;
+    const building = this.building();
+    const active = building ?? inspected?.type;
     if (!active) return;
     const gap = 8;
     const width = (row.w - gap * 3) / 4;
@@ -948,12 +1004,13 @@ export class StationScene implements Scene {
     this.smallButton(ctx, this.rotateLeftButton, roomy ? "↺ Rotate" : "↺", canRotate);
     this.smallButton(ctx, this.rotateRightButton, roomy ? "Rotate ↻" : "↻", canRotate);
     // Building on touch buys at the ghost; otherwise the third button sells the selected part.
-    if (this.tool && this.touch) {
+    if (building && this.touch) {
       this.placeButton = at(2);
-      this.smallButton(ctx, this.placeButton, `Place $${PARTS[this.tool].cost}`, this.pending !== null);
+      const label = this.installing !== null ? "Install" : `Place $${PARTS[building].cost}`;
+      this.smallButton(ctx, this.placeButton, label, this.pending !== null);
     } else {
       this.sellButton = at(2);
-      const canSell = !this.tool && inspected !== undefined && inspected.type !== "bridge";
+      const canSell = !building && inspected !== undefined && inspected.type !== "bridge";
       this.smallButton(ctx, this.sellButton, inspected && canSell ? `Sell $${saleProceeds(this.run, inspected.hex)}` : "Sell", canSell);
     }
     this.smallButton(ctx, this.doneButton, "Done", true);
@@ -969,7 +1026,7 @@ export class StationScene implements Scene {
     drawText(ctx, label, r.x + r.w / 2, r.y + r.h / 2, { align: "center", bold: true, color: enabled ? THEME.text : THEME.muted });
   }
 
-  // Loaded contracts first, then the rest of the board. Click a card to load or unload it.
+  // Loaded contracts first, then salvage, then the rest of the board. Click a card to load or unload it.
   private renderContractBoard(ctx: CanvasRenderingContext2D, area: Rect): void {
     const loaded = holdUsed(this.run);
     const capacity = this.stats.cargoCapacity;
@@ -991,31 +1048,37 @@ export class StationScene implements Scene {
     });
 
     // One row of up to five cards; more wrap onto a second row of short cards.
-    const count = this.run.cargo.length + this.run.offers.length;
+    const count = this.run.cargo.length + this.run.salvage.length + this.run.offers.length;
     this.renderContractCards(ctx, { x: area.x, y: area.y + 16, w: area.w, h: area.h - 16 }, count > 5 ? Math.ceil(count / 2) : Math.max(1, count));
   }
 
-  // Loaded contracts first, then the rest of the board, in rows of `columns` cards filling `area`.
+  // Loaded contracts first, then salvage, then the rest of the board, in rows of `columns` cards filling `area`.
   private renderContractCards(ctx: CanvasRenderingContext2D, area: Rect, columns: number): void {
     const loaded = holdUsed(this.run);
     const capacity = this.stats.cargoCapacity;
-    const cards = [
-      ...this.run.cargo.map((contract) => ({ contract, loaded: true })),
-      ...this.run.offers.map((contract) => ({ contract, loaded: false })),
-    ];
-    if (cards.length === 0) {
+    const count = this.run.cargo.length + this.run.salvage.length + this.run.offers.length;
+    if (count === 0) {
       drawText(ctx, "No contracts on the board.", area.x, area.y + 30, { color: THEME.muted });
       return;
     }
 
     const gap = this.touch ? 6 : 10;
-    const rows = Math.ceil(cards.length / columns);
+    const rows = Math.ceil(count / columns);
     const cardWidth = (area.w - gap * (columns - 1)) / columns;
     const cardHeight = (area.h - gap * (rows - 1)) / rows;
-    this.contractCards = cards.map((card, i) => ({
-      ...card,
-      rect: { x: area.x + (i % columns) * (cardWidth + gap), y: area.y + Math.floor(i / columns) * (cardHeight + gap), w: cardWidth, h: cardHeight },
-    }));
+    const rectAt = (i: number): Rect => ({
+      x: area.x + (i % columns) * (cardWidth + gap),
+      y: area.y + Math.floor(i / columns) * (cardHeight + gap),
+      w: cardWidth,
+      h: cardHeight,
+    });
+    const salvageStart = this.run.cargo.length;
+    const offersStart = salvageStart + this.run.salvage.length;
+    this.contractCards = [
+      ...this.run.cargo.map((contract, i) => ({ contract, loaded: true, rect: rectAt(i) })),
+      ...this.run.offers.map((contract, i) => ({ contract, loaded: false, rect: rectAt(offersStart + i) })),
+    ];
+    this.run.salvage.forEach((salvage, i) => this.renderSalvageCard(ctx, rectAt(salvageStart + i), salvage, i));
 
     for (const { rect, contract, loaded: isLoaded } of this.contractCards) {
       const fits = isLoaded || contract.units <= capacity - loaded;
@@ -1047,6 +1110,40 @@ export class StationScene implements Scene {
         payColor: fits ? THEME.good : THEME.muted,
       });
     }
+  }
+
+  // A salvaged part in the hold: its name and health, with buttons to install it or sell it.
+  private renderSalvageCard(ctx: CanvasRenderingContext2D, rect: Rect, salvage: Salvage, index: number): void {
+    const def = PARTS[salvage.type];
+    const installing = this.installing === index;
+    ctx.fillStyle = "#2a2416";
+    ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
+    ctx.strokeStyle = installing ? THEME.accent : THEME.warn;
+    ctx.lineWidth = installing ? 2 : 1;
+    ctx.strokeRect(rect.x + 0.5, rect.y + 0.5, rect.w - 1, rect.h - 1);
+
+    const x = rect.x + 10;
+    const right = rect.x + rect.w - 10;
+    const top = rect.y + (rect.h < 50 ? 12 : 14);
+    const health = `${Math.round((salvage.hp / def.maxHp) * 100)}%`;
+    const healthStyle: TextStyle = { align: "right", bold: true, size: 12, color: salvage.hp < def.maxHp ? THEME.warn : THEME.good };
+    drawText(ctx, health, right, top, healthStyle);
+    ctx.font = "600 12px system-ui, sans-serif";
+    const nameStyle: TextStyle = { bold: true };
+    drawText(ctx, fitText(ctx, `${def.name} (salvage)`, rect.w - 26 - ctx.measureText(health).width, nameStyle), x, top, nameStyle);
+    if (rect.h >= 80) {
+      drawText(ctx, `${ECONOMY.salvageUnits} units of hold space`, x, rect.y + 34, { color: THEME.muted, size: 12 });
+    }
+
+    // Two buttons along the bottom of the card.
+    const buttonHeight = Math.min(24, rect.h - 30);
+    const buttonY = rect.y + rect.h - buttonHeight - 5;
+    const buttonWidth = (rect.w - 10 - 6) / 2;
+    const install = { x: rect.x + 5, y: buttonY, w: buttonWidth, h: buttonHeight };
+    const sell = { x: install.x + buttonWidth + 6, y: buttonY, w: buttonWidth, h: buttonHeight };
+    this.salvageButtons.push({ rect: install, index, action: "install" }, { rect: sell, index, action: "sell" });
+    this.smallButton(ctx, install, installing ? "Installing" : "Install", true);
+    this.smallButton(ctx, sell, `Sell $${sellValue(salvage)}`, true);
   }
 
   // One contract's name, tier, route, pay and `footer`, laid out tighter on short cards. The shortest cards drop
