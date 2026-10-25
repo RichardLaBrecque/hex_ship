@@ -80,6 +80,7 @@ function testRun(overrides: Partial<Run> = {}): Run {
     kills: 0,
     valueTier: 1,
     topTrips: 0,
+    won: null,
     peakShipValue: 0,
     cargoEarned: 0,
     bountiesEarned: 0,
@@ -205,6 +206,16 @@ describe("afterFlight", () => {
     expect(run.money).toBe(1099);
     expect(run.bountiesEarned).toBe(108);
     expect(run.kills).toBe(11);
+  });
+
+  it("wins the run as the Warrior on the day of a trip that destroyed the boss", () => {
+    const run = afterFlight(testRun({ day: 9 }), { ...quietTrip(testRun()), boss: true, bossKilled: true });
+    expect(run.won).toEqual({ win: "warrior", day: 9 });
+  });
+
+  it("keeps the first win when the boss is destroyed again", () => {
+    const run = afterFlight(testRun({ won: { win: "merchant", day: 4 } }), { ...quietTrip(testRun()), boss: true, bossKilled: true });
+    expect(run.won).toEqual({ win: "merchant", day: 4 });
   });
 
   it("adds the salvage picked up to the salvage already aboard", () => {
@@ -499,6 +510,21 @@ describe("towBack", () => {
 });
 
 describe("arrive", () => {
+  it("wins the run as the Merchant on the day the Grand Haul is delivered", () => {
+    const run = testRun({ day: 9, cargo: [{ ...CONTRACT("G", 4), grand: true }] });
+    expect(arrive(run, quietTrip(run), 1, sequence(0), TEST_ECONOMY).run.won).toEqual({ win: "merchant", day: 10 });
+  });
+
+  it("keeps the first win when the Grand Haul is delivered after it", () => {
+    const run = testRun({ won: { win: "warrior", day: 4 }, cargo: [{ ...CONTRACT("G", 4), grand: true }] });
+    expect(arrive(run, quietTrip(run), 1, sequence(0), TEST_ECONOMY).run.won).toEqual({ win: "warrior", day: 4 });
+  });
+
+  it("leaves a run without the Grand Haul unwon", () => {
+    const run = testRun({ cargo: [CONTRACT("A", 4)] });
+    expect(arrive(run, quietTrip(run), 1, sequence(0), TEST_ECONOMY).run.won).toBeNull();
+  });
+
   it("pays for delivered cargo, moves a day on and docks at the planet it reached", () => {
     const run = testRun({ cargo: [CONTRACT("A", 4, 10), CONTRACT("B", 2, 25)], offers: [CONTRACT("OLD", 1)] });
     const result = arrive(run, quietTrip(run), 1, sequence(0), TEST_ECONOMY);

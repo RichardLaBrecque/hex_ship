@@ -27,6 +27,7 @@ const testRun = (): Run => ({
   kills: 4,
   valueTier: 2,
   topTrips: 5,
+  won: { win: "warrior", day: 7 },
   peakShipValue: 990,
   cargoEarned: 900,
   bountiesEarned: 90,
@@ -51,16 +52,28 @@ describe("saveRun / loadRun", () => {
     expect(loadRun(store, TEST_PARTS)).toBeNull();
   });
 
+  // Before version 6 a won run ended straight away, so no saved run was won.
+  const unwon = () => {
+    const { won: _, ...rest } = testRun();
+    return { ...rest, ship: [...rest.ship.values()] };
+  };
+
+  it("loads a version 5 save, from before play went on after a win, as not won", () => {
+    const store = memoryStore();
+    store.set(SAVE_KEY, JSON.stringify({ version: 5, run: unwon() }));
+    expect(loadRun(store, TEST_PARTS)).toEqual({ ...testRun(), won: null });
+  });
+
   // Before version 5 there was no salvage.
   const unsalvaged = () => {
-    const { salvage: _, ...rest } = testRun();
-    return { ...rest, ship: [...rest.ship.values()] };
+    const { salvage: _, ...rest } = unwon();
+    return rest;
   };
 
   it("loads a version 4 save, from before salvage, with an empty hold of salvage", () => {
     const store = memoryStore();
     store.set(SAVE_KEY, JSON.stringify({ version: 4, run: unsalvaged() }));
-    expect(loadRun(store, TEST_PARTS)).toEqual({ ...testRun(), salvage: [] });
+    expect(loadRun(store, TEST_PARTS)).toEqual({ ...testRun(), won: null, salvage: [] });
   });
 
   // Before version 3 there were two planets, and every contract ran from the docked planet to the other one.
@@ -71,6 +84,7 @@ describe("saveRun / loadRun", () => {
   };
   const routedTwoPlanet = (run: Run): Run => ({
     ...run,
+    won: null,
     salvage: [],
     offers: run.offers.map((c) => ({ ...c, from: 1, to: 0, grand: false })),
     cargo: run.cargo.map((c) => ({ ...c, from: 1, to: 0, grand: false })),
@@ -122,6 +136,12 @@ describe("saveRun / loadRun", () => {
   it("ignores a save with salvage of a part that doesn't exist", () => {
     const store = memoryStore();
     saveRun({ ...testRun(), salvage: [{ type: "warp drive" as Run["salvage"][number]["type"], hp: 9 }] }, store);
+    expect(loadRun(store, TEST_PARTS)).toBeNull();
+  });
+
+  it("ignores a save won in a way that doesn't exist", () => {
+    const store = memoryStore();
+    saveRun({ ...testRun(), won: { win: "pacifist" as "warrior", day: 7 } }, store);
     expect(loadRun(store, TEST_PARTS)).toBeNull();
   });
 

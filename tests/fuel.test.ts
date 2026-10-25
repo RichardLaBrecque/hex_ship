@@ -44,7 +44,7 @@ function testShip(): Ship {
 }
 
 function testRun(overrides: Partial<Run> = {}): Run {
-  return { money: 1000, day: 1, ship: testShip(), crew: 2, crewSigned: 2, fuel: 50, docked: 0, offers: [], cargo: [], salvage: [], delivered: 0, kills: 0, valueTier: 1, topTrips: 0, peakShipValue: 0, cargoEarned: 0, bountiesEarned: 0, ...overrides };
+  return { money: 1000, day: 1, ship: testShip(), crew: 2, crewSigned: 2, fuel: 50, docked: 0, offers: [], cargo: [], salvage: [], delivered: 0, kills: 0, valueTier: 1, topTrips: 0, won: null, peakShipValue: 0, cargoEarned: 0, bountiesEarned: 0, ...overrides };
 }
 
 function ok(outcome: Outcome): Run {

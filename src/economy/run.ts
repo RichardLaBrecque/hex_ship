@@ -8,6 +8,7 @@ import { contractPay, deliverableAt, generateOffers, holdUsed, type Contract } f
 import { valueTier } from "./danger";
 import { hiringFees, wages } from "./crew";
 import type { Salvage } from "./salvage";
+import { deliveredGrandHaul, type Won } from "./victory";
 
 // Everything about the current run. Actions return a new Run instead of changing this one.
 export type Run = {
@@ -25,6 +26,7 @@ export type Run = {
   readonly kills: number; // enemy ships destroyed this run: notoriety
   readonly valueTier: number; // ship-value danger tier as of the last launch (see danger.ts)
   readonly topTrips: number; // trips that arrived after flying at top danger: every few is a boss trip (see danger.ts)
+  readonly won: Won | null; // how and when the run was first won; play goes on after a win
   // The score, kept as three separate columns.
   readonly peakShipValue: number; // the most the ship's parts were worth at any launch
   readonly cargoEarned: number; // total paid for delivered contracts
@@ -53,6 +55,7 @@ export function newRun(random: Random = Math.random, econ: Economy = ECONOMY): R
     kills: 0,
     valueTier: 1,
     topTrips: 0,
+    won: null,
     peakShipValue: shipValue(ship),
     cargoEarned: 0,
     bountiesEarned: 0,
@@ -122,9 +125,13 @@ export type TripResult = {
 const countsTowardBoss = (trip: TripResult, danger: Danger): boolean =>
   trip.danger === danger.levels.length && (!trip.boss || trip.bossKilled);
 
+// A trip that destroyed the boss wins the run as the Warrior, if it wasn't already won.
+export const withBossWin = (run: Run, trip: TripResult): Run =>
+  run.won === null && trip.bossKilled ? { ...run, won: { win: "warrior", day: run.day } } : run;
+
 // Fuel burned, damage taken (lost parts are gone), bounties earned, kills made and salvage picked up.
 export const afterFlight = (run: Run, trip: TripResult): Run => ({
-  ...run,
+  ...withBossWin(run, trip),
   fuel: trip.fuel,
   ship: trip.ship,
   salvage: [...run.salvage, ...trip.salvage],
@@ -140,6 +147,7 @@ export type Arrival = { run: Run; delivered: readonly Contract[]; earned: number
 
 // Docking at `planet` after `trip`: get paid for the cargo bound there, a day passes, a new contract board.
 // Cargo bound anywhere else stays aboard. Every contract delivered adds to your reputation, which the new board already reflects.
+// Delivering the Grand Haul wins the run as the Merchant, if it wasn't already won.
 export function arrive(
   launched: Run,
   trip: TripResult,
@@ -161,6 +169,7 @@ export function arrive(
       cargoEarned: run.cargoEarned + earned,
       day,
       docked: planet,
+      won: run.won ?? (deliveredGrandHaul(unloaded) ? { win: "merchant", day } : null),
       cargo: run.cargo.filter((c) => !deliverableAt(c, planet)),
       delivered,
       offers: generateOffers(day, delivered, planet, random, econ),

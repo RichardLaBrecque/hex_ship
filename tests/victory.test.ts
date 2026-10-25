@@ -27,6 +27,11 @@ describe("shareText", () => {
     );
   });
 
+  it("gives the day the run was won, even when play went on after it", () => {
+    const later = { ...run, day: 50, won: { win: "warrior", day: 42 } } as Run;
+    expect(shareText(later, "warrior", "URL").split("\n")[0]).toBe("Hex Ship: I won as The Warrior on day 42!");
+  });
+
   it("names the merchant's deed", () => {
     expect(shareText(run, "merchant", "URL").split("\n").slice(0, 2)).toEqual([
       "Hex Ship: I won as The Merchant on day 42!",

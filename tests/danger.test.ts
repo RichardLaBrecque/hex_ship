@@ -37,6 +37,7 @@ const run = (overrides: Partial<Run>): Run => ({
   kills: 0,
   valueTier: 1,
   topTrips: 0,
+  won: null,
   peakShipValue: 0,
   cargoEarned: 0,
   bountiesEarned: 0,

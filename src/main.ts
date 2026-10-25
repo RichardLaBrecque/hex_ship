@@ -1,7 +1,7 @@
 import { Sound } from "./audio/sound";
 import { PLANETS } from "./data/balance";
-import { afterFlight, arrive, launch, newRun, towBack, type Run, type TripResult } from "./economy/run";
-import { deliveredGrandHaul } from "./economy/victory";
+import { afterFlight, arrive, launch, newRun, towBack, withBossWin, type Run, type TripResult } from "./economy/run";
+import type { Win } from "./economy/victory";
 import { Input } from "./engine/input";
 import { startLoop } from "./engine/loop";
 import { SceneManager } from "./engine/scene";
@@ -61,44 +61,64 @@ function startTrip(docked: Run): void {
   if (!outcome.ok) return;
   const flying = outcome.run;
   saveRun(flying);
-  scenes.switchTo(
-    new FlightScene({
-      run: flying,
-      sound,
-      onArrive: (trip, planet) => {
-        sound.dock();
-        const { run, delivered, earned } = arrive(flying, trip, planet);
-        if (deliveredGrandHaul(delivered)) {
-          endRun(run, "merchant");
-          return;
-        }
-        const report =
-          delivered.length > 0
-            ? `Delivered ${delivered.length} contract(s): +$${earned}`
-            : run.cargo.length > 0
-              ? `No cargo bound for ${PLANETS[planet].name}.`
-              : "Arrived with an empty hold.";
-        openStation(run, withTrip(report, trip));
-      },
-      onAbort: (trip) =>
-        trip.fuel > 0
-          ? openStation(afterFlight(flying, trip), withTrip("Turned back. Wages aren't refunded.", trip))
-          : openStation(towBack(afterFlight(flying, trip)), withTrip("Towed back on an empty tank.", trip)),
-      onDestroyed: () => endRun(flying, "destroyed"),
-      onVictory: (trip) => endRun(afterFlight(flying, trip), "warrior"),
-    }),
-  );
+  const flight = new FlightScene({
+    run: flying,
+    sound,
+    onArrive: (trip, planet) => {
+      sound.dock();
+      const { run, delivered, earned } = arrive(flying, trip, planet);
+      const report =
+        delivered.length > 0
+          ? `Delivered ${delivered.length} contract(s): +$${earned}`
+          : run.cargo.length > 0
+            ? `No cargo bound for ${PLANETS[planet].name}.`
+            : "Arrived with an empty hold.";
+      // Saved before the victory screen, so closing the tab on it keeps the win.
+      if (run.won?.win === "merchant" && flying.won === null) {
+        saveRun(run);
+        showVictory(run, "merchant", "Keep playing", () => openStation(run, withTrip(report, trip)));
+        return;
+      }
+      openStation(run, withTrip(report, trip));
+    },
+    onAbort: (trip) =>
+      trip.fuel > 0
+        ? openStation(afterFlight(flying, trip), withTrip("Turned back. Wages aren't refunded.", trip))
+        : openStation(towBack(afterFlight(flying, trip)), withTrip("Towed back on an empty tank.", trip)),
+    // A boss destroyed before the core still wins the run.
+    onDestroyed: (trip) => endRun(withBossWin(flying, trip), "destroyed"),
+    // Keeping on flying goes back to this same flight, right where it paused.
+    onVictory: (trip) => showVictory(afterFlight(flying, trip), "warrior", "Keep flying", () => scenes.switchTo(flight)),
+  });
+  scenes.switchTo(flight);
 }
 
-// The core is lost, the player ended the run at a station, or the run was won: the save goes and the score joins the records.
+// The core is lost or the player ended the run: the save goes and the score joins the records.
 function endRun(run: Run, reason: RunEnd): void {
-  clearRun();
-  const win = reason === "warrior" || reason === "merchant" ? reason : undefined;
-  const { records, newBests } = addScore(loadRecords(), scoreOf(run, win));
-  saveRecords(records);
-  const url = window.location.href.split(/[?#]/)[0];
-  scenes.switchTo(new GameOverScene({ run, reason, records, newBests, onRestart: () => openStation(newRun()), share, url }));
+  const { records, newBests } = recordRun(run);
+  scenes.switchTo(new GameOverScene({ run, reason, records, newBests, onRestart: () => openStation(newRun()), share, url: playUrl() }));
 }
+
+// The run was just won. Its score shows where it would land if the run ended now, but it's only recorded if the
+// player ends it here; keeping on playing records it whenever the run does end.
+function showVictory(run: Run, win: Win, label: string, onKeepPlaying: () => void): void {
+  const { records, newBests } = addScore(loadRecords(), scoreOf(run, win));
+  const onRestart = (): void => {
+    recordRun(run);
+    openStation(newRun());
+  };
+  scenes.switchTo(new GameOverScene({ run, reason: win, records, newBests, onRestart, share, url: playUrl(), keepPlaying: { label, onKeepPlaying } }));
+}
+
+// Deletes the save and adds the run's score to the records, tagged with how it was won if it was.
+function recordRun(run: Run): ReturnType<typeof addScore> {
+  clearRun();
+  const result = addScore(loadRecords(), scoreOf(run, run.won?.win));
+  saveRecords(result.records);
+  return result;
+}
+
+const playUrl = (): string => window.location.href.split(/[?#]/)[0];
 
 // Phones get the share sheet; everything else copies to the clipboard. Resolves to what to tell the player.
 async function share(text: string): Promise<string> {

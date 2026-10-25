@@ -3,6 +3,7 @@ import { PARTS, type PartCatalog } from "../data/parts";
 import type { Contract } from "../economy/contracts";
 import type { Run } from "../economy/run";
 import type { Salvage } from "../economy/salvage";
+import type { Won } from "../economy/victory";
 import { hexKey } from "../hex/hex";
 import type { PlacedPart } from "../ship/ship";
 import { browserStore, parseJson, type Store } from "./store";
@@ -10,7 +11,7 @@ import { browserStore, parseJson, type Store } from "./store";
 // The run in progress, saved at every station change and at launch, and deleted when the core is lost.
 // Bump the version whenever Run changes shape: an older save is then ignored instead of loading half-filled.
 export const SAVE_KEY = "hex-ship/run";
-export const SAVE_VERSION = 5;
+export const SAVE_VERSION = 6;
 
 type SavedRun = Omit<Run, "ship"> & { ship: PlacedPart[] };
 type SaveFile = { version: number; run: SavedRun };
@@ -32,17 +33,19 @@ export function loadRun(store: Store = browserStore(), catalog: PartCatalog = PA
 // Older saves, brought up to the current shape. Null for a version this game doesn't know.
 // Version 1 is version 2 before boss trips were counted. Version 2 had only two planets, so every contract
 // went from the planet you were docked at to the other one. Version 3 is version 4 before the Grand Haul,
-// so no contract in it is grand. Version 4 is version 5 before salvage, so its hold has none.
+// so no contract in it is grand. Version 4 is version 5 before salvage, so its hold has none. Version 5 is
+// version 6 before play went on after a win, so its run isn't won: a won run used to end straight away.
 function upgrade(file: SaveFile): SavedRun | null {
   const { version, run } = file;
   if (version === SAVE_VERSION) return run;
-  if (version !== 1 && version !== 2 && version !== 3 && version !== 4) return null;
+  if (version < 1 || version > 5 || !Number.isInteger(version)) return null;
   if (typeof run !== "object" || run === null) return null;
   const routed = (c: Contract): Contract => (version >= 3 ? c : { ...c, from: run.docked, to: run.docked === 0 ? 1 : 0 });
-  const upgraded = (c: Contract): Contract => (version === 4 ? c : { ...routed(c), grand: false });
+  const upgraded = (c: Contract): Contract => (version >= 4 ? c : { ...routed(c), grand: false });
   return {
     ...run,
-    salvage: [],
+    won: null,
+    salvage: version === 5 ? run.salvage : [],
     topTrips: version === 1 ? 0 : run.topTrips,
     offers: Array.isArray(run.offers) ? run.offers.map(upgraded) : run.offers,
     cargo: Array.isArray(run.cargo) ? run.cargo.map(upgraded) : run.cargo,
@@ -81,7 +84,8 @@ function isSavedRun(run: SavedRun | undefined, catalog: PartCatalog): boolean {
     Array.isArray(run.cargo) &&
     run.cargo.every(isContract) &&
     Array.isArray(run.salvage) &&
-    run.salvage.every((salvage) => isSalvage(salvage, catalog))
+    run.salvage.every((salvage) => isSalvage(salvage, catalog)) &&
+    (run.won === null || isWon(run.won))
   );
 }
 
@@ -93,6 +97,9 @@ const isPart = (part: PlacedPart, catalog: PartCatalog): boolean =>
   Number.isInteger(part.hex?.r) &&
   Number.isInteger(part.rotation) &&
   Number.isFinite(part.hp);
+
+const isWon = (won: Won): boolean =>
+  typeof won === "object" && won !== null && (won.win === "warrior" || won.win === "merchant") && Number.isFinite(won.day);
 
 const isSalvage = (salvage: Salvage, catalog: PartCatalog): boolean =>
   typeof salvage === "object" && salvage !== null && Object.hasOwn(catalog, salvage.type) && Number.isFinite(salvage.hp);

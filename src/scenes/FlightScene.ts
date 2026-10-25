@@ -32,8 +32,8 @@ export type FlightOptions = {
   run: Run;
   onArrive: (trip: TripResult, planet: number) => void; // docked at PLANETS[planet]
   onAbort: (trip: TripResult) => void; // fuel 0 means a tow is needed
-  onDestroyed: () => void; // the core was destroyed
-  onVictory: (trip: TripResult) => void; // the boss was destroyed: the run is won
+  onDestroyed: (trip: TripResult) => void; // the core was destroyed
+  onVictory: (trip: TripResult) => void; // the boss was destroyed and the run is won; the flight can carry on after
   sound: Sound;
 };
 
@@ -87,6 +87,7 @@ export class FlightScene implements Scene {
   private kills = 0;
   private wreckTimer: number | null = null; // counts down to Game Over once the core is lost
   private victoryTimer: number | null = null; // counts down to the victory screen once the boss is destroyed
+  private celebrated = false; // the victory screen was shown, and the flight carried on
   private camera: Point;
   private thrust = 0;
   private fuel: number;
@@ -152,7 +153,7 @@ export class FlightScene implements Scene {
       this.thrust = 0;
       this.options.sound.thrust(0);
       this.stepWorld(dt);
-      if (this.wreckTimer <= 0) this.options.onDestroyed();
+      if (this.wreckTimer <= 0) this.options.onDestroyed(this.trip());
       return;
     }
     // Once the boss is down the run is won, whatever happens to the ship in the moments before the victory screen.
@@ -161,7 +162,11 @@ export class FlightScene implements Scene {
       this.thrust = 0;
       this.options.sound.thrust(0);
       this.stepWorld(dt);
-      if (this.victoryTimer <= 0) this.options.onVictory(this.trip());
+      if (this.victoryTimer <= 0) {
+        this.victoryTimer = null;
+        this.celebrated = true;
+        this.options.onVictory(this.trip());
+      }
       return;
     }
 
@@ -205,7 +210,8 @@ export class FlightScene implements Scene {
     for (const i of refill.due) this.spawnEnemy(this.slots[i], i, respawnBody(player.body, Math.random));
 
     this.stepWorld(dt);
-    if (bossDefeated(this.slots)) {
+    // Only the first win gets a victory screen. A run already won just fights on.
+    if (!this.celebrated && this.options.run.won === null && bossDefeated(this.slots)) {
       this.victoryTimer = COMBAT.wreckDelay;
       return;
     }
