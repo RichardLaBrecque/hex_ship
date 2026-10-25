@@ -6,7 +6,7 @@
 //   - Weapons: rotation is the direction the barrel points.
 //   - Everything else ignores rotation.
 
-export type PartId = "bridge" | "engine" | "fuel" | "crew" | "laser" | "cannon" | "missile" | "cargo" | "armor" | "shield";
+export type PartId = "bridge" | "engine" | "fuel" | "crew" | "laser" | "cannon" | "missile" | "cargo" | "armor" | "shield" | "tractor";
 
 // beam: hits instantly along a line. shell: flies straight. missile: steers toward its target.
 export type WeaponKind = "beam" | "shell" | "missile";
@@ -39,6 +39,8 @@ export type PartDef = {
   shield: number;
   shieldRegen: number; // per second
   repair: number; // hp per second spread across damaged parts
+  tractorRange: number; // pixels: salvage this close to the ship is pulled in
+  tractorPull: number; // pixels/s: how fast salvage is pulled toward the ship
   weapon: WeaponStats | null;
 };
 
@@ -55,6 +57,8 @@ const BLANK = {
   shield: 0,
   shieldRegen: 0,
   repair: 0,
+  tractorRange: 0,
+  tractorPull: 0,
   weapon: null,
 };
 
@@ -178,6 +182,20 @@ export const PARTS: PartCatalog = {
     crewRequired: 1,
     shield: 50,
     shieldRegen: 5,
+  },
+  // Not sold anywhere: the Flagship always drops one when it's destroyed.
+  tractor: {
+    ...BLANK,
+    id: "tractor",
+    name: "Tractor Beam",
+    description: "Pulls salvage toward the ship from far away. Not for sale: salvaged from the Flagship.",
+    color: "#e8a33d",
+    cost: 400,
+    mass: 5,
+    maxHp: 20,
+    crewRequired: 1,
+    tractorRange: 500,
+    tractorPull: 150,
   },
 };
 

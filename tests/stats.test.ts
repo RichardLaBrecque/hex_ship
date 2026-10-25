@@ -148,4 +148,18 @@ describe("computeShipStats", () => {
     expect(stats.hull).toBe(85);
     expect(stats.maxHull).toBe(90);
   });
+
+  it("has no tractor beam without one", () => {
+    const stats = computeShipStats(build([0, 0, "bridge", 0]), 1, TEST_PARTS);
+    expect(stats.tractorRange).toBe(0);
+    expect(stats.tractorPull).toBe(0);
+  });
+
+  it("pulls with a tractor beam's full reach, its pull weakened by damage", () => {
+    // tractor: range 100, pull 50, 10 hp; at 5 hp it pulls half as hard but reaches as far
+    const ship = withHp(build([0, 0, "bridge", 0], [1, 0, "tractor", 0]), 1, 0, 5);
+    const stats = computeShipStats(ship, 2, TEST_PARTS);
+    expect(stats.tractorRange).toBe(100);
+    expect(stats.tractorPull).toBe(25);
+  });
 });

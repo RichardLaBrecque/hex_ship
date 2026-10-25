@@ -20,6 +20,8 @@ function def(id: PartId, overrides: Partial<PartDef>): PartDef {
     shield: 0,
     shieldRegen: 0,
     repair: 0,
+    tractorRange: 0,
+    tractorPull: 0,
     weapon: null,
     ...overrides,
   };
@@ -50,4 +52,5 @@ export const TEST_PARTS: PartCatalog = {
   cargo: def("cargo", { cost: 10, mass: 5, cargo: 10 }),
   armor: def("armor", { mass: 20, maxHp: 100 }),
   shield: def("shield", { mass: 5, crewRequired: 1, shield: 40, shieldRegen: 4 }),
+  tractor: def("tractor", { cost: 200, mass: 5, crewRequired: 1, tractorRange: 100, tractorPull: 50 }),
 };

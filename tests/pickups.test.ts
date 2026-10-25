@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { collectPickups, stepPickups, type Pickup } from "../src/sim/pickups";
+import { collectPickups, pullPickups, stepPickups, type Pickup } from "../src/sim/pickups";
 
 const pickup = (overrides: Partial<Pickup> = {}): Pickup => ({
   salvage: { type: "engine", hp: 9 },
@@ -47,5 +47,37 @@ describe("collectPickups", () => {
 
   it("isn't blocked by a full hold when nothing is in reach", () => {
     expect(collectPickups([pickup({ x: 99 })], { x: 0, y: 0 }, 10, 0, 5).blocked).toBe(false);
+  });
+});
+
+describe("pullPickups", () => {
+  // A grip this strong reaches the pull within one step.
+  const GRIP = 1000;
+
+  it("pulls salvage in range straight toward the ship", () => {
+    const [pulled] = pullPickups([pickup()], { x: 90, y: 0, vx: 0, vy: 0 }, 100, 50, 1, GRIP);
+    expect(pulled.vx).toBeCloseTo(50);
+    expect(pulled.vy).toBeCloseTo(0);
+  });
+
+  it("adds the ship's own velocity, so salvage keeps up with a ship flying away", () => {
+    const [pulled] = pullPickups([pickup()], { x: 90, y: 0, vx: 300, vy: 0 }, 100, 50, 1, GRIP);
+    expect(pulled.vx).toBeCloseTo(350);
+  });
+
+  it("eases toward the pull rather than snapping to it", () => {
+    // 1 - e^(-3 × 0.1) of the way from 0 to 50
+    const [pulled] = pullPickups([pickup()], { x: 90, y: 0, vx: 0, vy: 0 }, 100, 50, 0.1, 3);
+    expect(pulled.vx).toBeCloseTo(50 * (1 - Math.exp(-0.3)));
+  });
+
+  it("leaves salvage out of range alone", () => {
+    const far = pickup({ vx: 9 });
+    expect(pullPickups([far], { x: 101, y: 0, vx: 0, vy: 0 }, 100, 50, 1, GRIP)).toEqual([far]);
+  });
+
+  it("leaves salvage alone without a working tractor beam", () => {
+    const near = pickup({ vx: 9 });
+    expect(pullPickups([near], { x: 9, y: 0, vx: 0, vy: 0 }, 100, 0, 1, GRIP)).toEqual([near]);
   });
 });

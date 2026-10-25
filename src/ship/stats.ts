@@ -32,6 +32,8 @@ export type ShipStats = {
   efficiency: number; // 0..1, below 1 when under-crewed
   repair: number;
   dps: number;
+  tractorRange: number; // pixels: the longest reach of any tractor beam aboard, 0 without one
+  tractorPull: number; // pixels/s, after damage and crew efficiency
 };
 
 // Damaged parts work in proportion to their remaining HP.
@@ -64,6 +66,8 @@ export function computeShipStats(ship: Ship, crew: number, catalog: PartCatalog 
   let fuelCapacity = 0;
   let repair = 0;
   let dps = 0;
+  let tractorRange = 0;
+  let tractorPull = 0;
   for (const part of ship.values()) {
     const def = catalog[part.type];
     const health = part.hp / def.maxHp;
@@ -78,6 +82,8 @@ export function computeShipStats(ship: Ship, crew: number, catalog: PartCatalog 
     cargoCapacity += def.cargo;
     fuelCapacity += def.fuelCapacity;
     repair += def.repair * health;
+    tractorRange = Math.max(tractorRange, def.tractorRange);
+    tractorPull += def.tractorPull * health * efficiency;
     if (def.weapon) dps += def.weapon.damage * def.weapon.fireRate * health * efficiency;
     if (part.type === "engine" && !isExhaustBlocked(ship, part)) {
       turn += def.turn * health * efficiency;
@@ -122,5 +128,7 @@ export function computeShipStats(ship: Ship, crew: number, catalog: PartCatalog 
     efficiency,
     repair,
     dps,
+    tractorRange,
+    tractorPull,
   };
 }

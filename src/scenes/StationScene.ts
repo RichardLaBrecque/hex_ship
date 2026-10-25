@@ -92,6 +92,7 @@ export class StationScene implements Scene {
     cargo: 0,
     armor: 0,
     shield: 0,
+    tractor: 0,
   };
   private hovered: Hex | null = null;
   private mouse: Point = { x: 0, y: 0 };
@@ -1231,6 +1232,7 @@ function partDetails(id: PartId): string[] {
   if (def.fuelBurn > 0) lines.push(`Burns ${def.fuelBurn} fuel/s at full thrust`);
   if (def.shield > 0) lines.push(`Shield ${def.shield} · Regen ${def.shieldRegen}/s`, `Covers parts within ${COMBAT.shieldReach} hexes`);
   if (def.repair > 0) lines.push(`Repairs ${def.repair} hp/s`);
+  if (def.tractorPull > 0) lines.push(`Pulls salvage within ${def.tractorRange} at ${def.tractorPull}/s`);
   if (def.weapon) {
     const w = def.weapon;
     lines.push(`Damage ${w.damage} × ${w.fireRate}/s`);

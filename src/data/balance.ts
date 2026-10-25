@@ -21,6 +21,7 @@ export const COMBAT = {
   wreckDelay: 2, // seconds between losing the core and the Game Over screen
   salvageLife: 30, // seconds salvage drifts before it's lost; it blinks for the last salvageBlink
   salvageBlink: 5,
+  tractorGrip: 3, // per second: how quickly a tractor beam brings salvage round to its pull
   ramBounce: 0.4, // share of the closing speed ships keep when they bounce apart; 0 sticks together, 1 is fully elastic
   ramSafeSpeed: 60, // pixels/s; ships closing slower than this bump without damage
   ramDamage: 0.12, // damage to each of the two parts that struck, per pixel/s of closing speed above ramSafeSpeed

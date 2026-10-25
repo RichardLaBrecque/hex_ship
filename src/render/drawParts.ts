@@ -79,6 +79,16 @@ export function drawPartIcon(ctx: CanvasRenderingContext2D, def: PartDef, rotati
       circle(ctx, 0, 0, 0.2 * s);
       ctx.fill();
       break;
+    case "tractor":
+      // a horseshoe magnet
+      ctx.beginPath();
+      ctx.arc(0, -0.05 * s, 0.38 * s, Math.PI, 0);
+      ctx.lineWidth = Math.max(2.5, s * 0.18);
+      ctx.lineCap = "butt";
+      ctx.stroke();
+      ctx.fillRect(-0.47 * s, -0.05 * s, 0.18 * s, 0.5 * s);
+      ctx.fillRect(0.29 * s, -0.05 * s, 0.18 * s, 0.5 * s);
+      break;
   }
   ctx.restore();
 }

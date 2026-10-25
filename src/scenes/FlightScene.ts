@@ -22,7 +22,7 @@ import { aiControls, type AiMode } from "../sim/ai";
 import { bounce, findContact, ramDamage } from "../sim/collision";
 import { burnFuel, fuelRange } from "../sim/fuel";
 import { activeThrust, speed, stepBody, type Body } from "../sim/physics";
-import { collectPickups, stepPickups, type Pickup } from "../sim/pickups";
+import { collectPickups, pullPickups, stepPickups, type Pickup } from "../sim/pickups";
 import { activeLevels, bossDefeated, fillSlots, retarget, vacate, type Slot } from "../sim/roster";
 import { buildEnemy, respawnBody, spawnBody } from "../sim/spawner";
 import { applyHit, hexWorld, isWrecked, makeVessel, setShip, type HitKind, type Vessel } from "../sim/vessel";
@@ -246,9 +246,10 @@ export class FlightScene implements Scene {
     this.dangerFlash = DANGER_FLASH_SECONDS;
   }
 
-  // Flying into salvage picks it up, as long as the hold has room for it.
+  // A tractor beam pulls salvage in, and flying into salvage picks it up, as long as the hold has room for it.
   private collectSalvage(dt: number): void {
     const player = this.player;
+    this.pickups = pullPickups(this.pickups, player.body, player.stats.tractorRange, player.stats.tractorPull, dt);
     const free = player.stats.cargoCapacity - holdUsed(this.options.run) - salvageUnits(this.salvage);
     const { collected, left, blocked } = collectPickups(this.pickups, player.body, player.radius + FLIGHT.hexSize, free, ECONOMY.salvageUnits);
     this.pickups = left;
@@ -441,6 +442,12 @@ export class FlightScene implements Scene {
       if (salvaged.includes(part)) this.pickups.push({ ...drift, salvage: { type: part.type, hp: part.hp } });
       else this.debris.push({ ...drift, part });
     }
+    // The Flagship always leaves a tractor beam behind, on top of its salvage.
+    const enemy = this.enemies.find((e) => e.vessel === v);
+    if (enemy && this.isBoss(enemy) && destroyed && isWrecked(v)) {
+      const { x, y, vx, vy } = v.body;
+      this.pickups.push({ salvage: { type: "tractor", hp: PARTS.tractor.maxHp }, x, y, vx, vy, angle: 0, spin: 0.5, age: 0 });
+    }
   }
 
   // How far out the ship is, as a share of the hop to the origin's nearest neighbour (see Encounter).
@@ -607,7 +614,26 @@ export class FlightScene implements Scene {
   }
 
   // Salvage glows with a pulsing ring so it stands out from debris, and blinks when it's about to be lost.
+  // Salvage a tractor beam is pulling in is tied to the ship by a faint beam.
   private renderPickups(ctx: CanvasRenderingContext2D): void {
+    const { tractorRange, tractorPull } = this.player.stats;
+    const body = this.player.body;
+    if (tractorPull > 0 && !isWrecked(this.player)) {
+      ctx.save();
+      ctx.strokeStyle = PARTS.tractor.color;
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([6, 6]);
+      ctx.lineDashOffset = -this.time * 30;
+      ctx.globalAlpha = 0.45;
+      for (const p of this.pickups) {
+        if (distance(p, body) > tractorRange) continue;
+        ctx.beginPath();
+        ctx.moveTo(body.x, body.y);
+        ctx.lineTo(p.x, p.y);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
     for (const p of this.pickups) {
       const blinking = p.age > COMBAT.salvageLife - COMBAT.salvageBlink;
       if (blinking && Math.floor(this.time * 6) % 2 === 0) continue;
