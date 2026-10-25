@@ -21,7 +21,7 @@ import { aiControls, type AiMode } from "../sim/ai";
 import { bounce, findContact, ramDamage } from "../sim/collision";
 import { burnFuel } from "../sim/fuel";
 import { activeThrust, speed, stepBody, type Body } from "../sim/physics";
-import { bossDefeated, encounterSlots, fillSlots, vacate, type Slot } from "../sim/roster";
+import { activeLevels, bossDefeated, fillSlots, retarget, vacate, type Slot } from "../sim/roster";
 import { buildEnemy, respawnBody, spawnBody } from "../sim/spawner";
 import { applyHit, hexWorld, isWrecked, makeVessel, setShip, type HitKind, type Vessel } from "../sim/vessel";
 import { fireWeapons, projectileHit, stepProjectile, weaponRange, type Beam, type Projectile } from "../sim/weapons";
@@ -54,6 +54,7 @@ const MISSILE_SMOKE = "#8a93a8";
 const TRAUMA_PER_DAMAGE = 1 / 60; // screen shake added per point of damage to the player's ship
 const TRAUMA_PART_LOST = 0.3; // extra shake when the player loses a part
 const TRAUMA_KILL = 0.35; // shake from an enemy exploding right next to you; less further away
+const DANGER_FLASH_SECONDS = 3; // how long "DANGER RISING" shows
 const TRAUMA_KILL_RANGE = 600; // pixels at which an enemy exploding no longer shakes the screen
 
 // Free flight: the ship can dock at any planet except the one it left.
@@ -68,9 +69,11 @@ export class FlightScene implements Scene {
   private debris: Debris[] = [];
   private particles: Particle[] = [];
   private trauma = 0; // screen shake, 0..1
-  private danger: number;
+  private danger: number; // rises mid-flight as kills raise notoriety, never falls
+  private dangerFlash = 0; // seconds left showing that danger rose
   private bossTrip: boolean; // the encounters end with a boss (see isBossTrip)
-  private encounters: Encounter[]; // still to come, in route order
+  private encounters: readonly Encounter[]; // the danger level's encounters, in route order
+  private reached = 0; // the farthest progress so far: encounters at or before it have triggered
   private slots: Slot[] = []; // the enemies triggered encounters keep active (see roster.ts)
   private bounty = 0;
   private kills = 0;
@@ -99,7 +102,7 @@ export class FlightScene implements Scene {
     this.fuel = run.fuel;
     this.danger = dangerTier(run);
     this.bossTrip = isBossTrip(run);
-    this.encounters = [...(this.bossTrip ? DANGER.boss.encounters : DANGER.levels[this.danger - 1])];
+    this.encounters = this.bossTrip ? DANGER.boss.encounters : DANGER.levels[this.danger - 1];
 
     const heading = Math.atan2(facing.y - this.from.y, facing.x - this.from.x);
     const startDistance = this.from.radius + 80;
@@ -171,12 +174,13 @@ export class FlightScene implements Scene {
     this.options.sound.setListener(player.body);
     this.options.sound.thrust(power);
 
-    // An encounter's enemies arrive ahead of the ship. Once it's triggered, each one gone is replaced from any direction.
-    if (this.encounters.length > 0 && this.progress() >= this.encounters[0].at) {
-      const added = encounterSlots(this.encounters.shift()!);
-      for (const [i, slot] of added.entries()) this.spawnEnemy(slot, this.slots.length + i, spawnBody(player.body, this.ahead(), Math.random));
-      this.slots.push(...added);
-    }
+    // Newly triggered enemies arrive ahead of the ship. Once in the fight, each one gone is replaced from any direction.
+    this.reached = Math.max(this.reached, this.progress());
+    this.dangerFlash = Math.max(0, this.dangerFlash - dt);
+    this.raiseDanger();
+    const roster = retarget(this.slots, activeLevels(this.encounters, this.reached));
+    this.slots = roster.slots;
+    for (const i of roster.added) this.spawnEnemy(this.slots[i], i, spawnBody(player.body, this.ahead(), Math.random));
     const refill = fillSlots(this.slots, dt);
     this.slots = refill.slots;
     for (const i of refill.due) this.spawnEnemy(this.slots[i], i, respawnBody(player.body, Math.random));
@@ -197,6 +201,18 @@ export class FlightScene implements Scene {
 
     const dock = this.dockZone();
     if (dock !== null && speed(player.body) < FLIGHT.dockSpeed) this.options.onArrive(this.trip(), dock);
+  }
+
+  // Kills made this trip count toward notoriety straight away. When they raise danger, the trip switches to that
+  // level's encounters from where the ship is now. A boss trip is already at top danger.
+  private raiseDanger(): void {
+    if (this.bossTrip) return;
+    const run = this.options.run;
+    const now = dangerTier({ ...run, kills: run.kills + this.kills });
+    if (now <= this.danger) return;
+    this.danger = now;
+    this.encounters = DANGER.levels[now - 1];
+    this.dangerFlash = DANGER_FLASH_SECONDS;
   }
 
   // A fresh enemy for slots[index], at `body`.
@@ -614,6 +630,9 @@ export class FlightScene implements Scene {
     });
     this.renderFuelGauge(ctx, 20, 192);
 
+    if (this.dangerFlash > 0) {
+      drawText(ctx, `DANGER RISING: ${this.danger}`, width / 2, 70, { align: "center", size: 22, bold: true, color: THEME.bad });
+    }
     if (this.wreckTimer !== null) {
       drawText(ctx, "CORE DESTROYED", width / 2, height / 2 - 90, { align: "center", size: 28, bold: true, color: THEME.bad });
     } else if (this.fuel <= 0) {
