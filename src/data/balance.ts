@@ -22,6 +22,8 @@ export const COMBAT = {
   ramBounce: 0.4, // share of the closing speed ships keep when they bounce apart; 0 sticks together, 1 is fully elastic
   ramSafeSpeed: 60, // pixels/s; ships closing slower than this bump without damage
   ramDamage: 0.12, // damage to each of the two parts that struck, per pixel/s of closing speed above ramSafeSpeed
+  shieldReach: 2, // a shield generator covers parts up to this many hexes away
+  shieldMissileCost: 0.25, // shield charge a point of missile damage drains: shields cut missile damage by 75%
 };
 
 export type Combat = typeof COMBAT;

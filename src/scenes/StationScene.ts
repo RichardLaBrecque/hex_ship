@@ -1,4 +1,4 @@
-import { ECONOMY, FLIGHT, PLANETS } from "../data/balance";
+import { COMBAT, ECONOMY, FLIGHT, PLANETS } from "../data/balance";
 import { BUILDABLE, PARTS, type PartId } from "../data/parts";
 import { cargoUnits, contractPay, loadContract, reputation, unloadContract, type Contract } from "../economy/contracts";
 import { fireCrew, hireCrew, hiringFees, wages } from "../economy/crew";
@@ -9,7 +9,7 @@ import { buyPart, repairAll, repairCost, sellPart, sellValue } from "../economy/
 import type { Input } from "../engine/input";
 import type { Scene } from "../engine/scene";
 import { DEFAULT_MIN_VIEW, type Size } from "../engine/view";
-import { hexesInRadius, hexKey, hexToPixel, mod6, neighbor, pixelToHex, type Hex, type Point } from "../hex/hex";
+import { hexAdd, hexesInRadius, hexKey, hexToPixel, mod6, neighbor, pixelToHex, type Hex, type Point } from "../hex/hex";
 import { drawHex } from "../render/drawHex";
 import { muteButtonRect } from "../render/muteButton";
 import { drawFiringArc, drawPart, drawShip } from "../render/drawShip";
@@ -523,9 +523,14 @@ export class StationScene implements Scene {
     }
   }
 
-  // Firing arc for weapons and the exhaust hex for engines.
+  // Firing arc for weapons, the exhaust hex for engines, and the hexes a shield covers.
   private renderPartGuides(ctx: CanvasRenderingContext2D, type: PartId, h: Hex, rotation: number): void {
     const def = PARTS[type];
+    if (def.shield > 0) {
+      for (const offset of hexesInRadius(COMBAT.shieldReach)) {
+        drawHex(ctx, this.toScreen(hexAdd(h, offset)), this.hexSize - 4, { stroke: def.color, lineWidth: 1 });
+      }
+    }
     if (def.weapon) drawFiringArc(ctx, this.toScreen(h), rotation, def.weapon.arc, this.hexSize * 4, def.color);
     if (type === "engine") {
       const exhaust = neighbor(h, rotation);
@@ -940,7 +945,7 @@ function partDetails(id: PartId): string[] {
   if (def.cargo > 0) lines.push(`Cargo ${def.cargo}`);
   if (def.fuelCapacity > 0) lines.push(`Fuel ${def.fuelCapacity} units`);
   if (def.fuelBurn > 0) lines.push(`Burns ${def.fuelBurn} fuel/s at full thrust`);
-  if (def.shield > 0) lines.push(`Shield ${def.shield} · Regen ${def.shieldRegen}/s`);
+  if (def.shield > 0) lines.push(`Shield ${def.shield} · Regen ${def.shieldRegen}/s`, `Covers parts within ${COMBAT.shieldReach} hexes`);
   if (def.repair > 0) lines.push(`Repairs ${def.repair} hp/s`);
   if (def.weapon) {
     const w = def.weapon;

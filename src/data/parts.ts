@@ -170,7 +170,7 @@ export const PARTS: PartCatalog = {
     ...BLANK,
     id: "shield",
     name: "Shield Generator",
-    description: "Adds a regenerating shield that absorbs hits first.",
+    description: "A regenerating shield that absorbs hits on parts within 2 hexes of it. Missiles drain it at a quarter of their damage.",
     color: "#3d8fd6",
     cost: 250,
     mass: 5,

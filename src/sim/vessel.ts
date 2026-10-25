@@ -1,7 +1,8 @@
-import { FLIGHT } from "../data/balance";
-import { PARTS, type PartCatalog } from "../data/parts";
+import { COMBAT, FLIGHT } from "../data/balance";
+import { PARTS, type PartCatalog, type WeaponKind } from "../data/parts";
 import { hexKey, hexToPixel, pixelToHex, type Point } from "../hex/hex";
-import { absorbWithShield, damagePart } from "../ship/damage";
+import { damagePart } from "../ship/damage";
+import { absorbWithShields, clampShields, coveringShields, shieldCapacity, type Shields } from "../ship/shields";
 import { centerOfMass, findBridges, type PlacedPart, type Ship } from "../ship/ship";
 import { computeShipStats, type ShipStats } from "../ship/stats";
 import type { Body } from "./physics";
@@ -17,7 +18,7 @@ export type Vessel = {
   pivot: Point; // ship-local centre of mass
   radius: number; // ship-local distance from the pivot to the farthest hex edge
   crew: number;
-  shield: number;
+  shields: Shields; // charge held by each shield generator
   fullHull: number; // max hull at launch, before any parts were lost
   aimError: number; // degrees either side of a perfect shot; 0 for the player
   reload: Map<string, number>; // seconds until each weapon (by hexKey) can fire again
@@ -41,7 +42,7 @@ export function makeVessel(
     pivot,
     radius: shipRadius(ship, pivot, size),
     crew,
-    shield: stats.shieldMax,
+    shields: shieldCapacity(ship, catalog),
     fullHull: stats.maxHull,
     aimError: 0,
     reload: new Map(),
@@ -76,15 +77,29 @@ export function keyAtWorld(v: Vessel, world: Point, size: number = FLIGHT.hexSiz
 
 export const isWrecked = (v: Vessel): boolean => findBridges(v.ship).length === 0;
 
-export type Hit = { destroyed: PlacedPart | null; detached: PlacedPart[] };
+// What struck the ship: a weapon, or another ship ramming it.
+export type HitKind = WeaponKind | "ram";
 
-// Shields soak the hit first; whatever gets through damages the part that was struck.
-export function applyHit(v: Vessel, key: string, damage: number, size: number = FLIGHT.hexSize, catalog: PartCatalog = PARTS): Hit {
-  const { shield, leftover } = absorbWithShield(v.shield, damage);
-  v.shield = shield;
+// throughShield is the damage the shields didn't stop.
+export type Hit = { throughShield: number; destroyed: PlacedPart | null; detached: PlacedPart[] };
+
+// Shields covering the struck part soak the hit first, and missiles drain them at a discount.
+// Whatever gets through damages the part that was struck.
+export function applyHit(
+  v: Vessel,
+  key: string,
+  damage: number,
+  kind: HitKind,
+  size: number = FLIGHT.hexSize,
+  catalog: PartCatalog = PARTS,
+): Hit {
+  const covering = coveringShields(v.ship, key, COMBAT.shieldReach, catalog);
+  const cost = kind === "missile" ? COMBAT.shieldMissileCost : 1;
+  const { shields, leftover } = absorbWithShields(v.shields, covering, damage, cost);
+  v.shields = shields;
   const result = damagePart(v.ship, key, leftover);
   if (result.ship !== v.ship) setShip(v, result.ship, size, catalog);
-  return { destroyed: result.destroyed, detached: result.detached };
+  return { throughShield: leftover, destroyed: result.destroyed, detached: result.detached };
 }
 
 // Swaps in a changed layout. The ship stays where it was on screen even though its centre of mass moved.
@@ -96,7 +111,7 @@ export function setShip(v: Vessel, ship: Ship, size: number = FLIGHT.hexSize, ca
   v.pivot = pivot;
   v.radius = shipRadius(ship, pivot, size);
   v.body = { ...v.body, x: anchor.x, y: anchor.y };
-  v.shield = Math.min(v.shield, v.stats.shieldMax);
+  v.shields = clampShields(v.shields, ship, catalog);
 }
 
 function shipRadius(ship: Ship, pivot: Point, size: number): number {

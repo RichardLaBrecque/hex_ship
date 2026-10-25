@@ -14,6 +14,7 @@ import { drawPart, drawShip } from "../render/drawShip";
 import { drawTouchControls, touchControlRects, type HeldControls, type TouchControls } from "../render/touchControls";
 import { drawText, pointInRect, THEME } from "../render/ui";
 import { repairShip } from "../ship/damage";
+import { rechargeShields, shieldCapacity, totalShield } from "../ship/shields";
 import { engineFlame, shipValue, type PlacedPart } from "../ship/ship";
 import { computeShipStats } from "../ship/stats";
 import { aiControls, type AiMode } from "../sim/ai";
@@ -21,7 +22,7 @@ import { bounce, findContact, ramDamage } from "../sim/collision";
 import { burnFuel } from "../sim/fuel";
 import { activeThrust, speed, stepBody, type Body } from "../sim/physics";
 import { buildEnemy, spawnBody } from "../sim/spawner";
-import { applyHit, hexWorld, isWrecked, makeVessel, setShip, type Vessel } from "../sim/vessel";
+import { applyHit, hexWorld, isWrecked, makeVessel, setShip, type HitKind, type Vessel } from "../sim/vessel";
 import { fireWeapons, projectileHit, stepProjectile, weaponRange, type Beam, type Projectile } from "../sim/weapons";
 
 export type FlightOptions = {
@@ -224,7 +225,7 @@ export class FlightScene implements Scene {
       for (const shot of volley.beams) {
         this.beams.push(shot.beam);
         this.options.sound.laser(shot.beam.from);
-        if (shot.key) this.hit(shot.target, shot.key, shot.damage, shot.beam.to);
+        if (shot.key) this.hit(shot.target, shot.key, shot.damage, "beam", shot.beam.to);
       }
     }
 
@@ -233,7 +234,7 @@ export class FlightScene implements Scene {
     for (const p of this.projectiles) {
       const moved = stepProjectile(p, dt);
       const struck = projectileHit(moved, targets);
-      if (struck) this.hit(struck.vessel, struck.key, moved.damage, moved);
+      if (struck) this.hit(struck.vessel, struck.key, moved.damage, moved.kind, moved);
       else if (moved.life > 0) flying.push(moved);
     }
     this.projectiles = flying;
@@ -287,7 +288,7 @@ export class FlightScene implements Scene {
 
   // Shields recharge and crew patch up damaged parts.
   private upkeep(v: Vessel, dt: number): void {
-    v.shield = Math.min(v.stats.shieldMax, v.shield + v.stats.shieldRegen * dt);
+    v.shields = rechargeShields(v.shields, v.ship, v.stats.efficiency, dt);
     const repaired = repairShip(v.ship, v.stats.repair * dt);
     if (repaired !== v.ship) setShip(v, repaired);
   }
@@ -300,17 +301,15 @@ export class FlightScene implements Scene {
         if (!contact) continue;
         const damage = ramDamage(bounce(a, b, contact));
         if (damage <= 0) continue;
-        this.hit(a, contact.aKey, damage, contact.point);
-        this.hit(b, contact.bKey, damage, contact.point);
+        this.hit(a, contact.aKey, damage, "ram", contact.point);
+        this.hit(b, contact.bKey, damage, "ram", contact.point);
       }
     }
   }
 
   // `at` is where the shot landed, for sparks and sound.
-  private hit(v: Vessel, key: string, damage: number, at: Point): void {
-    const shieldBefore = v.shield;
-    const { destroyed, detached } = applyHit(v, key, damage);
-    const throughShield = damage - (shieldBefore - v.shield);
+  private hit(v: Vessel, key: string, damage: number, kind: HitKind, at: Point): void {
+    const { throughShield, destroyed, detached } = applyHit(v, key, damage, kind);
     const drift = { x: v.body.vx, y: v.body.vy };
     if (throughShield > 0) {
       this.particles.push(...burst(at, BURSTS.hullHit, Math.random, drift));
@@ -390,13 +389,18 @@ export class FlightScene implements Scene {
       thrust,
       outline,
     });
-    if (v.stats.shieldMax > 0 && v.shield > 0) {
+    // A bubble around each charged generator, as wide as the hexes it covers.
+    const bubble = (COMBAT.shieldReach + 0.5) * Math.sqrt(3) * FLIGHT.hexSize;
+    for (const [key, max] of shieldCapacity(v.ship)) {
+      const charge = v.shields.get(key) ?? 0;
+      if (charge <= 0) continue;
+      const center = hexWorld(v, v.ship.get(key)!);
       ctx.save();
-      ctx.globalAlpha = 0.15 + 0.5 * (v.shield / v.stats.shieldMax);
+      ctx.globalAlpha = 0.15 + 0.5 * (charge / max);
       ctx.strokeStyle = PARTS.shield.color;
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.arc(v.body.x, v.body.y, v.radius + 6, 0, Math.PI * 2);
+      ctx.arc(center.x, center.y, bubble, 0, Math.PI * 2);
       ctx.stroke();
       ctx.restore();
     }
@@ -529,7 +533,7 @@ export class FlightScene implements Scene {
     drawText(ctx, `Distance ${Math.round(this.distanceToDestination())}`, 20, 50, { color: THEME.muted });
     drawText(ctx, `Speed ${Math.round(speed(this.player.body))}`, 20, 70, { color: THEME.muted });
     drawText(ctx, `Hull ${Math.round(s.hull)} / ${Math.round(s.maxHull)}`, 20, 90, { color: THEME.muted });
-    drawText(ctx, `Shield ${Math.round(this.player.shield)} / ${Math.round(s.shieldMax)}`, 20, 110, { color: THEME.muted });
+    drawText(ctx, `Shield ${Math.round(totalShield(this.player.shields))} / ${Math.round(s.shieldMax)}`, 20, 110, { color: THEME.muted });
     drawText(ctx, `Cargo ${cargoUnits(this.options.run.cargo)} / ${s.cargoCapacity} units`, 20, 130, { color: THEME.muted });
     const boss = this.bossTrip ? "  ·  BOSS" : "";
     drawText(ctx, `Day ${this.options.run.day}  ·  $${this.options.run.money}  ·  Danger ${this.danger}${boss}`, 20, 150, {

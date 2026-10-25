@@ -56,15 +56,33 @@ describe("applyHit", () => {
   it("drains the shield before damaging the part", () => {
     // shield generator gives 40 shield
     const v = vessel("player", build([0, 0, "bridge", 0], [1, 0, "shield", 0]), at(0, 0));
-    applyHit(v, "0,0", 45, SIZE, TEST_PARTS);
-    expect(v.shield).toBe(0);
+    const hit = applyHit(v, "0,0", 45, "shell", SIZE, TEST_PARTS);
+    expect(v.shields.get("1,0")).toBe(0);
+    expect(hit.throughShield).toBe(5);
     expect(v.ship.get("0,0")!.hp).toBe(45);
+  });
+
+  it("lets a missile drain the shield at a quarter of its damage", () => {
+    const v = vessel("player", build([0, 0, "bridge", 0], [1, 0, "shield", 0]), at(0, 0));
+    const hit = applyHit(v, "0,0", 20, "missile", SIZE, TEST_PARTS);
+    expect(v.shields.get("1,0")).toBe(35);
+    expect(hit.throughShield).toBe(0);
+    expect(v.ship.get("0,0")!.hp).toBe(50);
+  });
+
+  it("leaves parts more than two hexes from the generator unshielded", () => {
+    // shield at -2,0 reaches the bridge at 0,0 but not the armor at 1,0
+    const v = vessel("player", build([0, 0, "bridge", 0], [-1, 0, "cargo", 0], [-2, 0, "shield", 0], [1, 0, "armor", 0]), at(0, 0));
+    const hit = applyHit(v, "1,0", 10, "shell", SIZE, TEST_PARTS);
+    expect(v.shields.get("-2,0")).toBe(40);
+    expect(hit.throughShield).toBe(10);
+    expect(v.ship.get("1,0")!.hp).toBe(90);
   });
 
   it("keeps the remaining hull where it was when parts break off", () => {
     const v = vessel("player", build([0, 0, "bridge", 0], [1, 0, "armor", 0]), at(0, 0));
     const bridgeBefore = toWorld(v, { x: 0, y: 0 });
-    const hit = applyHit(v, "1,0", 999, SIZE, TEST_PARTS);
+    const hit = applyHit(v, "1,0", 999, "shell", SIZE, TEST_PARTS);
     expect(hit.destroyed?.type).toBe("armor");
     expect(toWorld(v, { x: 0, y: 0 }).x).toBeCloseTo(bridgeBefore.x);
     expect(v.stats.mass).toBe(10);

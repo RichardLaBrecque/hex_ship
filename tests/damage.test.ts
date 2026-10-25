@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { hex } from "../src/hex/hex";
 import { partAt, placePart, type Ship } from "../src/ship/ship";
-import { absorbWithShield, damagePart, repairShip } from "../src/ship/damage";
+import { damagePart, repairShip } from "../src/ship/damage";
 import { TEST_PARTS } from "./catalog";
 
 const build = (...parts: [number, number, Parameters<typeof placePart>[2], number][]): Ship =>
@@ -46,16 +46,6 @@ describe("damagePart", () => {
   it("leaves the ship alone for an empty hex", () => {
     const ship = chain();
     expect(damagePart(ship, "5,5", 10).ship).toBe(ship);
-  });
-});
-
-describe("absorbWithShield", () => {
-  it("lets nothing through while the shield holds", () => {
-    expect(absorbWithShield(20, 5)).toEqual({ shield: 15, leftover: 0 });
-  });
-
-  it("passes on what the shield can't hold", () => {
-    expect(absorbWithShield(3, 5)).toEqual({ shield: 0, leftover: 2 });
   });
 });
 

@@ -31,12 +31,6 @@ export function damagePart(ship: Ship, key: string, amount: number): DamageResul
   return { ship: next, destroyed: part, detached };
 }
 
-// Shields soak up damage first. Returns the shield left and the damage that gets through.
-export function absorbWithShield(shield: number, amount: number): { shield: number; leftover: number } {
-  const absorbed = Math.min(shield, amount);
-  return { shield: shield - absorbed, leftover: amount - absorbed };
-}
-
 // Crew repairs are shared evenly across damaged parts, never past full hp.
 // Returns the same ship when nothing needs fixing.
 export function repairShip(ship: Ship, amount: number, catalog: PartCatalog = PARTS): Ship {
