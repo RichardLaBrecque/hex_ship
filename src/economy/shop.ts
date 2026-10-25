@@ -11,7 +11,7 @@ export function sellValue(part: PlacedPart, catalog: PartCatalog = PARTS): numbe
   return Math.floor(def.cost * (part.hp / def.maxHp));
 }
 
-// Buys a part into a hex. An existing part there is sold first.
+// Buys a part into a hex. An existing part there is sold first, along with any fuel that no longer fits (see fitFuel).
 // Placing the same type over itself just turns it to the new rotation, for free.
 export function buyPart(
   run: Run,
@@ -19,6 +19,7 @@ export function buyPart(
   type: PartId,
   rotation: number,
   catalog: PartCatalog = PARTS,
+  econ: Economy = ECONOMY,
 ): Outcome {
   const existing = partAt(run.ship, h);
   if (existing?.type === "bridge") return { ok: false, reason: "The bridge can't be replaced." };
@@ -29,15 +30,22 @@ export function buyPart(
   const price = catalog[type].cost;
   if (run.money + refund < price) return { ok: false, reason: `${catalog[type].name} costs $${price}.` };
   const bought = { ...run, ship: placePart(run.ship, h, type, rotation, catalog), money: run.money + refund - price };
-  return { ok: true, run: fitFuel(bought, catalog) };
+  return { ok: true, run: fitFuel(bought, catalog, econ) };
 }
 
-export function sellPart(run: Run, h: Hex, catalog: PartCatalog = PARTS): Outcome {
+// Sells the part in a hex, along with any fuel that no longer fits (see fitFuel).
+export function sellPart(run: Run, h: Hex, catalog: PartCatalog = PARTS, econ: Economy = ECONOMY): Outcome {
   const existing = partAt(run.ship, h);
   if (!existing) return { ok: false, reason: "Nothing to sell there." };
   if (existing.type === "bridge") return { ok: false, reason: "The bridge can't be sold." };
   const sold = { ...run, ship: removePart(run.ship, h), money: run.money + sellValue(existing, catalog) };
-  return { ok: true, run: fitFuel(sold, catalog) };
+  return { ok: true, run: fitFuel(sold, catalog, econ) };
+}
+
+// What selling the part in a hex pays: the part, plus fuel that no longer fits. 0 if it can't be sold.
+export function saleProceeds(run: Run, h: Hex, catalog: PartCatalog = PARTS, econ: Economy = ECONOMY): number {
+  const outcome = sellPart(run, h, catalog, econ);
+  return outcome.ok ? outcome.run.money - run.money : 0;
 }
 
 // Repairing a part costs a share of the value its damage knocked off, so it's always cheaper

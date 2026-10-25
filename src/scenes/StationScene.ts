@@ -5,7 +5,7 @@ import { fireCrew, hireCrew, hiringFees, wages } from "../economy/crew";
 import { dangerOutlook, type DangerOutlook } from "../economy/danger";
 import { refuel, refuelCost } from "../economy/fuel";
 import { launchCost, launchProblems, payAt, type Outcome, type Run } from "../economy/run";
-import { buyPart, repairAll, repairCost, sellPart, sellValue } from "../economy/shop";
+import { buyPart, repairAll, repairCost, saleProceeds, sellPart, sellValue } from "../economy/shop";
 import type { Input } from "../engine/input";
 import type { Scene } from "../engine/scene";
 import { DEFAULT_MIN_VIEW, type Size } from "../engine/view";
@@ -298,6 +298,12 @@ export class StationScene implements Scene {
     this.launchCost = launchCost(run);
     this.range = fuelRange(this.stats, run.fuel);
     this.options.onChange(run);
+  }
+
+  // " (incl. $X fuel)" when selling the part also sells fuel that would no longer fit, else "".
+  private fuelNote(part: PlacedPart): string {
+    const fuel = saleProceeds(this.run, part.hex) - sellValue(part);
+    return fuel > 0 ? ` (incl. $${fuel} fuel)` : "";
   }
 
   private inspectedPart(): PlacedPart | undefined {
@@ -635,7 +641,7 @@ export class StationScene implements Scene {
         const label = shown.type === "engine" ? "Exhaust points" : "Facing";
         line(`${label} ${FACING_NAMES[shown.rotation]}`, { size: 12 }, 16);
       }
-      if (shown.type !== "bridge") line(`Sells for $${sellValue(shown)}`, { size: 12 }, 16);
+      if (shown.type !== "bridge") line(`Sells for $${saleProceeds(this.run, shown.hex)}${this.fuelNote(shown)}`, { size: 12 }, 16);
     }
     for (const lineText of partDetails(type)) {
       line(lineText, { size: 12 }, 16);
@@ -901,7 +907,7 @@ export class StationScene implements Scene {
     } else {
       this.sellButton = at(2);
       const canSell = !this.tool && inspected !== undefined && inspected.type !== "bridge";
-      this.smallButton(ctx, this.sellButton, inspected && canSell ? `Sell $${sellValue(inspected)}` : "Sell", canSell);
+      this.smallButton(ctx, this.sellButton, inspected && canSell ? `Sell $${saleProceeds(this.run, inspected.hex)}` : "Sell", canSell);
     }
     this.smallButton(ctx, this.doneButton, "Done", true);
   }

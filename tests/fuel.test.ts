@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Economy } from "../src/data/balance";
 import { fitFuel, refuel, refuelCost } from "../src/economy/fuel";
 import type { Outcome, Run } from "../src/economy/run";
-import { sellPart } from "../src/economy/shop";
+import { buyPart, sellPart } from "../src/economy/shop";
 import { hex } from "../src/hex/hex";
 import { placePart, type Ship } from "../src/ship/ship";
 import { burnFuel, fuelRange, tripFuelEstimate } from "../src/sim/fuel";
@@ -114,9 +114,32 @@ describe("refuel", () => {
 });
 
 describe("fitFuel", () => {
-  it("spills fuel that no longer fits after selling a tank", () => {
-    const run = ok(sellPart(testRun(), hex(0, 1), TEST_PARTS));
+  it("sells back fuel that no longer fits after selling a tank", () => {
+    // 50 fuel in 60 of tanks; selling a 30-unit tank leaves room for 30, so 20 units sell at $3: $60, plus the $20 tank
+    const run = ok(sellPart(testRun(), hex(0, 1), TEST_PARTS, TEST_ECONOMY));
     expect(run.fuel).toBe(30);
+    expect(run.money).toBe(1080);
+  });
+
+  it("sells back fuel when a tank is built over", () => {
+    // the $20 tank is sold for a $10 cargo bay; 20 units of fuel sell at $3
+    const run = ok(buyPart(testRun(), hex(0, 1), "cargo", 0, TEST_PARTS, TEST_ECONOMY));
+    expect(run.fuel).toBe(30);
+    expect(run.money).toBe(1070);
+  });
+
+  it("rounds a part unit of fuel up, as refuelling does", () => {
+    // 20.5 units at $3 = $61.50 → $62
+    const run = fitFuel(testRun({ fuel: 50.5, ship: new Map([...testShip()].filter(([k]) => k !== "0,1")) }), TEST_PARTS, TEST_ECONOMY);
+    expect(run.money).toBe(1062);
+  });
+
+  it("makes moving a tank free: selling it, buying it elsewhere and refuelling costs what refuelling alone does", () => {
+    const sold = ok(sellPart(testRun(), hex(0, 1), TEST_PARTS, TEST_ECONOMY));
+    const moved = ok(refuel(ok(buyPart(sold, hex(1, 0), "fuel", 0, TEST_PARTS, TEST_ECONOMY)), TEST_PARTS, TEST_ECONOMY));
+    const stayed = ok(refuel(testRun(), TEST_PARTS, TEST_ECONOMY));
+    expect(moved.fuel).toBe(stayed.fuel);
+    expect(moved.money).toBe(stayed.money);
   });
 
   it("leaves fuel alone when it fits", () => {

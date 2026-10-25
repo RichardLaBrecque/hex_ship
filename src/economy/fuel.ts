@@ -19,8 +19,11 @@ export function refuel(run: Run, catalog: PartCatalog = PARTS, econ: Economy = E
   return { ok: true, run: { ...run, fuel: run.fuel + units, money: run.money - Math.ceil(units * econ.fuelPrice) } };
 }
 
-// After the ship changes, fuel that no longer fits in the tanks is lost.
-export function fitFuel(run: Run, catalog: PartCatalog = PARTS): Run {
+// After the ship changes, fuel that no longer fits in the tanks is sold back at the station's fuel price,
+// so moving a tank (sell, then buy and refuel) costs nothing. The refund rounds up like refuelCost does,
+// so buying the same fuel back costs exactly what selling it paid.
+export function fitFuel(run: Run, catalog: PartCatalog = PARTS, econ: Economy = ECONOMY): Run {
   const capacity = computeShipStats(run.ship, run.crew, catalog).fuelCapacity;
-  return run.fuel > capacity ? { ...run, fuel: capacity } : run;
+  if (run.fuel <= capacity) return run;
+  return { ...run, fuel: capacity, money: run.money + Math.ceil((run.fuel - capacity) * econ.fuelPrice) };
 }
