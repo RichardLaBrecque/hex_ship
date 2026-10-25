@@ -38,12 +38,12 @@ export type Planet = { name: string; x: number; y: number; radius: number; dockR
 // Every planet's nearest neighbour is close enough for the starter ship to reach and come back (tests/balance.test.ts).
 export const PLANETS: readonly Planet[] = [
   { name: "Avalon", x: 0, y: 0, radius: 160, dockRadius: 320, color: "#3f8fd0" },
-  { name: "Brask", x: 3800, y: -1400, radius: 130, dockRadius: 290, color: "#c8743a" },
-  { name: "Cinder", x: -3200, y: 2200, radius: 120, dockRadius: 280, color: "#d0503f" },
-  { name: "Dorne", x: 7200, y: 600, radius: 150, dockRadius: 310, color: "#7fb069" },
-  { name: "Eris", x: 1200, y: 3600, radius: 110, dockRadius: 270, color: "#b58ad8" },
-  { name: "Fallow", x: -2400, y: -3000, radius: 140, dockRadius: 300, color: "#c9b458" },
-  { name: "Gault", x: 10000, y: -2000, radius: 170, dockRadius: 330, color: "#5fb8c2" },
+  { name: "Brask", x: 7600, y: -2800, radius: 130, dockRadius: 290, color: "#c8743a" },
+  { name: "Cinder", x: -6400, y: 4400, radius: 120, dockRadius: 280, color: "#d0503f" },
+  { name: "Dorne", x: 14400, y: 1200, radius: 150, dockRadius: 310, color: "#7fb069" },
+  { name: "Eris", x: 2400, y: 7200, radius: 110, dockRadius: 270, color: "#b58ad8" },
+  { name: "Fallow", x: -4800, y: -6000, radius: 140, dockRadius: 300, color: "#c9b458" },
+  { name: "Gault", x: 20000, y: -4000, radius: 170, dockRadius: 330, color: "#5fb8c2" },
 ];
 
 export const ECONOMY = {
@@ -58,7 +58,7 @@ export const ECONOMY = {
   offersPerStation: 4,
   openShare: 0.25, // chance an offer is an open contract: delivered to any other planet, at a low fixed rate
   openPayShare: 0.5, // an open contract pays this share of its tier's pay, however far it goes
-  payDistance: 4000, // pixels; a contract to a planet this far away pays its tier's pay, and farther pays more in proportion
+  payDistance: 8000, // pixels, about one hop to a nearest neighbour; a contract this far pays its tier's pay, and farther pays more in proportion
   payBonusPerDelivery: 0.03, // reputation: every contract delivered adds 3% to contract pay
   topTierShare: 0.5, // chance an offer comes from your best unlocked contract tier rather than any unlocked tier
   // Delivering contracts earns reputation ranks, and each rank unlocks a contract tier.
