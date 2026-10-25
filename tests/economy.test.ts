@@ -31,6 +31,7 @@ const TEST_ECONOMY: Economy = {
   ],
   grandHaul: { units: 50, basePay: 10 },
   bountyShare: 0.5,
+  salvageUnits: 5,
 };
 
 // bridge (2 berths) + rear engine + cargo bay (10 units) + fuel tank (30 units). Needs 2 crew.
@@ -57,7 +58,7 @@ const planet = (x: number): Planet => ({ name: `P${x}`, x, y: 0, radius: 1, dock
 const TEST_PLANETS: readonly Planet[] = [planet(0), planet(1000), planet(3000)];
 
 // A trip at danger 1 that changed nothing: no fuel burned, no damage, no kills.
-const quietTrip = (run: Run): TripResult => ({ fuel: run.fuel, ship: run.ship, bounty: 0, kills: 0, danger: 1, boss: false, bossKilled: false });
+const quietTrip = (run: Run): TripResult => ({ fuel: run.fuel, ship: run.ship, bounty: 0, kills: 0, salvage: [], danger: 1, boss: false, bossKilled: false });
 
 const NO_BOSS = { every: 3, valueShare: 1, encounters: [] };
 
@@ -72,6 +73,7 @@ function testRun(overrides: Partial<Run> = {}): Run {
     docked: 0,
     offers: [],
     cargo: [],
+    salvage: [],
     delivered: 0,
     kills: 0,
     valueTier: 1,
@@ -194,12 +196,22 @@ describe("bountyFor", () => {
 describe("afterFlight", () => {
   it("keeps the fuel left and the damage taken, pays the bounties and counts the kills", () => {
     const ship = placePart(new Map(), hex(0, 0), "bridge", 0, TEST_PARTS);
-    const run = afterFlight(testRun({ kills: 9, bountiesEarned: 9 }), { fuel: 9, ship, bounty: 99, kills: 2, danger: 1, boss: false, bossKilled: false });
+    const trip = { fuel: 9, ship, bounty: 99, kills: 2, salvage: [], danger: 1, boss: false, bossKilled: false };
+    const run = afterFlight(testRun({ kills: 9, bountiesEarned: 9 }), trip);
     expect(run.fuel).toBe(9);
     expect(run.ship).toBe(ship);
     expect(run.money).toBe(1099);
     expect(run.bountiesEarned).toBe(108);
     expect(run.kills).toBe(11);
+  });
+
+  it("adds the salvage picked up to the salvage already aboard", () => {
+    const trip = { ...quietTrip(testRun()), salvage: [{ type: "laser" as const, hp: 9 }] };
+    const run = afterFlight(testRun({ salvage: [{ type: "engine", hp: 19 }] }), trip);
+    expect(run.salvage).toEqual([
+      { type: "engine", hp: 19 },
+      { type: "laser", hp: 9 },
+    ]);
   });
 });
 
@@ -246,6 +258,12 @@ describe("contracts", () => {
   it("loading needs enough free space", () => {
     const run = testRun({ cargo: [CONTRACT("A", 8)], offers: [CONTRACT("B", 3)] });
     expect(reason(loadContract(run, "B", TEST_PARTS))).toBe("Needs 3 units of space, only 2 free.");
+  });
+
+  it("loading counts salvage against the free space", () => {
+    // 10-unit bay: 4 units of cargo + 1 salvage × 5 units leaves 1 free
+    const run = testRun({ cargo: [CONTRACT("A", 4)], salvage: [{ type: "engine", hp: 9 }], offers: [CONTRACT("B", 2)] });
+    expect(reason(loadContract(run, "B", TEST_PARTS, TEST_ECONOMY))).toBe("Needs 2 units of space, only 1 free.");
   });
 
   it("unloading puts it back on the board", () => {
@@ -453,7 +471,19 @@ describe("launch", () => {
     const ship = new Map(testShip());
     ship.delete("0,1"); // sold the only cargo bay
     expect(launchProblems(testRun({ ship, cargo: [CONTRACT("A", 4)] }), TEST_PARTS, TEST_ECONOMY)).toContain(
-      "Cargo is over capacity (4 / 0). Unload a contract or add cargo bays.",
+      "Cargo is over capacity (4 / 0). Unload a contract, sell salvage or add cargo bays.",
+    );
+  });
+
+  it("is blocked when salvage fills the hold past capacity", () => {
+    // 10-unit bay: 3 salvage × 5 units
+    const salvage = [
+      { type: "engine" as const, hp: 9 },
+      { type: "engine" as const, hp: 9 },
+      { type: "engine" as const, hp: 9 },
+    ];
+    expect(launchProblems(testRun({ salvage }), TEST_PARTS, TEST_ECONOMY)).toContain(
+      "Cargo is over capacity (15 / 10). Unload a contract, sell salvage or add cargo bays.",
     );
   });
 });

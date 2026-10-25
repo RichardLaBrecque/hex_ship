@@ -4,9 +4,10 @@ import type { Hex } from "../hex/hex";
 import { partAt, placePart, removePart, rotatePart, type PlacedPart, type Ship } from "../ship/ship";
 import { fitFuel } from "./fuel";
 import type { Outcome, Run } from "./run";
+import type { Salvage } from "./salvage";
 
-// What you get back for a part: full price at full hp, scaled down by damage.
-export function sellValue(part: PlacedPart, catalog: PartCatalog = PARTS): number {
+// What you get back for a part, on the ship or salvaged: full price at full hp, scaled down by damage.
+export function sellValue(part: PlacedPart | Salvage, catalog: PartCatalog = PARTS): number {
   const def = catalog[part.type];
   return Math.floor(def.cost * (part.hp / def.maxHp));
 }

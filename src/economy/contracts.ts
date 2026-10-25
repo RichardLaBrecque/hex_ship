@@ -2,6 +2,7 @@ import { CARGO_NAMES, ECONOMY, PLANETS, type Economy, type Planet } from "../dat
 import { PARTS, type PartCatalog } from "../data/parts";
 import { computeShipStats } from "../ship/stats";
 import type { Outcome, Random, Run } from "./run";
+import { salvageUnits } from "./salvage";
 
 export type Contract = {
   readonly id: string;
@@ -55,6 +56,9 @@ export const contractPay = (contract: Contract): number => contract.units * cont
 
 export const cargoUnits = (contracts: readonly Contract[]): number => contracts.reduce((sum, c) => sum + c.units, 0);
 
+// Hold space in use: the contracts loaded plus the salvage aboard.
+export const holdUsed = (run: Run, econ: Economy = ECONOMY): number => cargoUnits(run.cargo) + salvageUnits(run.salvage, econ);
+
 // How many contract tiers `delivered` contracts have unlocked.
 export const unlockedTiers = (delivered: number, econ: Economy = ECONOMY): number =>
   econ.contractTiers.filter((tier) => delivered >= tier.unlockAt).length;
@@ -105,11 +109,11 @@ export function generateOffers(
   return grand ? [...offers, grand] : offers;
 }
 
-export function loadContract(run: Run, id: string, catalog: PartCatalog = PARTS): Outcome {
+export function loadContract(run: Run, id: string, catalog: PartCatalog = PARTS, econ: Economy = ECONOMY): Outcome {
   const contract = run.offers.find((c) => c.id === id);
   if (!contract) return { ok: false, reason: "That contract isn't on the board." };
   const capacity = computeShipStats(run.ship, run.crew, catalog).cargoCapacity;
-  const free = capacity - cargoUnits(run.cargo);
+  const free = capacity - holdUsed(run, econ);
   if (contract.units > free) return { ok: false, reason: `Needs ${contract.units} units of space, only ${free} free.` };
   return {
     ok: true,

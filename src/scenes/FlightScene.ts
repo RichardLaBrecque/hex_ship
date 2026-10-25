@@ -3,7 +3,7 @@ import { COMBAT, ECONOMY, FLIGHT, PLANETS, type Planet } from "../data/balance";
 import { bossTier, DANGER, ENCOUNTERS, ENEMY_TIERS, type Encounter, type EnemyTier } from "../data/enemies";
 import { dangerTier, isBossTrip } from "../economy/danger";
 import { PARTS } from "../data/parts";
-import { cargoUnits, deliverableAt, planetDistance } from "../economy/contracts";
+import { deliverableAt, holdUsed, planetDistance } from "../economy/contracts";
 import { bountyFor, type TripResult, type Run } from "../economy/run";
 import type { Input } from "../engine/input";
 import type { Scene } from "../engine/scene";
@@ -127,6 +127,7 @@ export class FlightScene implements Scene {
       ship: this.player.ship,
       bounty: this.bounty,
       kills: this.kills,
+      salvage: [],
       danger: this.danger,
       boss: this.bossTrip,
       bossKilled: bossDefeated(this.slots),
@@ -670,7 +671,7 @@ export class FlightScene implements Scene {
     drawText(ctx, `Speed ${Math.round(speed(this.player.body))}`, 20, 70, { color: THEME.muted });
     drawText(ctx, `Hull ${Math.round(s.hull)} / ${Math.round(s.maxHull)}`, 20, 90, { color: THEME.muted });
     drawText(ctx, `Shield ${Math.round(totalShield(this.player.shields))} / ${Math.round(s.shieldMax)}`, 20, 110, { color: THEME.muted });
-    drawText(ctx, `Cargo ${cargoUnits(this.options.run.cargo)} / ${s.cargoCapacity} units`, 20, 130, { color: THEME.muted });
+    drawText(ctx, `Cargo ${holdUsed(this.options.run)} / ${s.cargoCapacity} units`, 20, 130, { color: THEME.muted });
     const boss = this.bossTrip ? "  ·  BOSS" : "";
     drawText(ctx, `Day ${this.options.run.day}  ·  $${this.options.run.money}  ·  Danger ${this.danger}${boss}`, 20, 150, {
       color: this.bossTrip ? THEME.bad : THEME.muted,

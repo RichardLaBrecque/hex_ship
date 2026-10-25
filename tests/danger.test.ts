@@ -32,6 +32,7 @@ const run = (overrides: Partial<Run>): Run => ({
   docked: 0,
   offers: [],
   cargo: [],
+  salvage: [],
   delivered: 0,
   kills: 0,
   valueTier: 1,

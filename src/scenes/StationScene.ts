@@ -1,11 +1,11 @@
 import { COMBAT, ECONOMY, FLIGHT, PLANETS } from "../data/balance";
 import { BUILDABLE, PARTS, type PartId } from "../data/parts";
 import {
-  cargoUnits,
   contractPay,
   dumpContract,
   dumpPenalty,
   grandHaulUnlocked,
+  holdUsed,
   isGrandHaulEnd,
   loadContract,
   planetDistance,
@@ -517,7 +517,7 @@ export class StationScene implements Scene {
 
   // How full the hold is, the reputation it's earning, and the contracts as a two-column grid of cards.
   private renderTouchCargo(ctx: CanvasRenderingContext2D, body: Rect): void {
-    const loaded = cargoUnits(this.run.cargo);
+    const loaded = holdUsed(this.run);
     const capacity = this.stats.cargoCapacity;
     const left = body.x + 10;
     drawText(ctx, `Hold ${loaded} / ${capacity} units`, left, body.y + 12, {
@@ -971,7 +971,7 @@ export class StationScene implements Scene {
 
   // Loaded contracts first, then the rest of the board. Click a card to load or unload it.
   private renderContractBoard(ctx: CanvasRenderingContext2D, area: Rect): void {
-    const loaded = cargoUnits(this.run.cargo);
+    const loaded = holdUsed(this.run);
     const capacity = this.stats.cargoCapacity;
     drawText(ctx, "CONTRACTS", area.x, area.y, {
       bold: true,
@@ -997,7 +997,7 @@ export class StationScene implements Scene {
 
   // Loaded contracts first, then the rest of the board, in rows of `columns` cards filling `area`.
   private renderContractCards(ctx: CanvasRenderingContext2D, area: Rect, columns: number): void {
-    const loaded = cargoUnits(this.run.cargo);
+    const loaded = holdUsed(this.run);
     const capacity = this.stats.cargoCapacity;
     const cards = [
       ...this.run.cargo.map((contract) => ({ contract, loaded: true })),

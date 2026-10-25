@@ -76,6 +76,9 @@ export const ECONOMY = {
   // (tests/balance.test.ts shows a ship can carry it), and carrying it puts danger at the top level (see dangerTier).
   grandHaul: { units: 500, basePay: 30 }, // basePay: per unit at payDistance, scaled by distance and reputation like any routed contract
   bountyShare: 0.75, // a kill pays this share of the enemy ship's part value
+  // Parts salvaged from wrecks ride in the hold, sharing it with contracts. Selling one pays what the part is worth
+  // as it is, damage and all, and counts toward bounties; installing one puts it on the ship for free.
+  salvageUnits: 5, // hold space each salvaged part takes: half a cargo bay
 };
 
 export type Economy = typeof ECONOMY;

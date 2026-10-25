@@ -28,6 +28,7 @@ const TEST_ECONOMY: Economy = {
   contractTiers: [{ rank: "ONLY", unlockAt: 0, units: { min: 1, max: 1 }, pay: { min: 1, max: 1 } }],
   grandHaul: { units: 1, basePay: 0 },
   bountyShare: 0,
+  salvageUnits: 0,
 };
 
 const TUNING = { hexSize: 10, thrustScale: 10, reverseFactor: 0.5, turnScale: 1, gyroResponse: 4, torqueScale: 1, spinDrag: 1, drag: 0.5, dockSpeed: 50 };
@@ -41,7 +42,7 @@ function testShip(): Ship {
 }
 
 function testRun(overrides: Partial<Run> = {}): Run {
-  return { money: 1000, day: 1, ship: testShip(), crew: 2, crewSigned: 2, fuel: 50, docked: 0, offers: [], cargo: [], delivered: 0, kills: 0, valueTier: 1, topTrips: 0, peakShipValue: 0, cargoEarned: 0, bountiesEarned: 0, ...overrides };
+  return { money: 1000, day: 1, ship: testShip(), crew: 2, crewSigned: 2, fuel: 50, docked: 0, offers: [], cargo: [], salvage: [], delivered: 0, kills: 0, valueTier: 1, topTrips: 0, peakShipValue: 0, cargoEarned: 0, bountiesEarned: 0, ...overrides };
 }
 
 function ok(outcome: Outcome): Run {

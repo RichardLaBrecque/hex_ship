@@ -22,6 +22,7 @@ const testRun = (): Run => ({
   docked: 1,
   offers: [{ id: "9-0", cargo: "ORE", units: 9, payPerUnit: 19, tier: 1, from: 1, to: 6, grand: false }],
   cargo: [{ id: "9-1", cargo: "ICE", units: 4, payPerUnit: 29, tier: 0, from: 4, to: null, grand: true }],
+  salvage: [{ type: "engine", hp: 9 }],
   delivered: 9,
   kills: 4,
   valueTier: 2,
@@ -50,23 +51,36 @@ describe("saveRun / loadRun", () => {
     expect(loadRun(store, TEST_PARTS)).toBeNull();
   });
 
+  // Before version 5 there was no salvage.
+  const unsalvaged = () => {
+    const { salvage: _, ...rest } = testRun();
+    return { ...rest, ship: [...rest.ship.values()] };
+  };
+
+  it("loads a version 4 save, from before salvage, with an empty hold of salvage", () => {
+    const store = memoryStore();
+    store.set(SAVE_KEY, JSON.stringify({ version: 4, run: unsalvaged() }));
+    expect(loadRun(store, TEST_PARTS)).toEqual({ ...testRun(), salvage: [] });
+  });
+
   // Before version 3 there were two planets, and every contract ran from the docked planet to the other one.
   const twoPlanetRun = () => {
-    const { offers, cargo, ...rest } = testRun();
+    const { offers, cargo, ...rest } = unsalvaged();
     const unrouted = ({ from: _, to: __, grand: ___, ...c }: Contract) => c;
-    return { ...rest, ship: [...rest.ship.values()], offers: offers.map(unrouted), cargo: cargo.map(unrouted) };
+    return { ...rest, offers: offers.map(unrouted), cargo: cargo.map(unrouted) };
   };
   const routedTwoPlanet = (run: Run): Run => ({
     ...run,
+    salvage: [],
     offers: run.offers.map((c) => ({ ...c, from: 1, to: 0, grand: false })),
     cargo: run.cargo.map((c) => ({ ...c, from: 1, to: 0, grand: false })),
   });
 
   it("loads a version 3 save, from before the Grand Haul, with no contract grand", () => {
     const store = memoryStore();
-    const { offers, cargo, ...rest } = testRun();
+    const { offers, cargo, ...rest } = unsalvaged();
     const ungrand = ({ grand: _, ...c }: Contract) => c;
-    const run = { ...rest, ship: [...rest.ship.values()], offers: offers.map(ungrand), cargo: cargo.map(ungrand) };
+    const run = { ...rest, offers: offers.map(ungrand), cargo: cargo.map(ungrand) };
     store.set(SAVE_KEY, JSON.stringify({ version: 3, run }));
     const loaded = loadRun(store, TEST_PARTS);
     expect(loaded?.offers).toEqual(offers.map((c) => ({ ...c, grand: false })));
@@ -102,6 +116,12 @@ describe("saveRun / loadRun", () => {
     const store = memoryStore();
     saveRun(testRun(), store);
     store.set(SAVE_KEY, store.get(SAVE_KEY)!.replace('"engine"', '"warp drive"'));
+    expect(loadRun(store, TEST_PARTS)).toBeNull();
+  });
+
+  it("ignores a save with salvage of a part that doesn't exist", () => {
+    const store = memoryStore();
+    saveRun({ ...testRun(), salvage: [{ type: "warp drive" as Run["salvage"][number]["type"], hp: 9 }] }, store);
     expect(loadRun(store, TEST_PARTS)).toBeNull();
   });
 

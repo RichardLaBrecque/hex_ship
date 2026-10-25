@@ -4,9 +4,10 @@ import { shipValue, starterShip, type Ship } from "../ship/ship";
 import { computeShipStats } from "../ship/stats";
 import { validateShip } from "../ship/validate";
 import { DANGER, type Danger } from "../data/enemies";
-import { cargoUnits, contractPay, deliverableAt, generateOffers, type Contract } from "./contracts";
+import { contractPay, deliverableAt, generateOffers, holdUsed, type Contract } from "./contracts";
 import { valueTier } from "./danger";
 import { hiringFees, wages } from "./crew";
+import type { Salvage } from "./salvage";
 
 // Everything about the current run. Actions return a new Run instead of changing this one.
 export type Run = {
@@ -19,6 +20,7 @@ export type Run = {
   readonly docked: number; // index into PLANETS
   readonly offers: readonly Contract[]; // contracts on the board at this station
   readonly cargo: readonly Contract[]; // contracts loaded aboard, paid when docking where they're bound
+  readonly salvage: readonly Salvage[]; // parts salvaged from wrecks, sharing the hold with the cargo
   readonly delivered: number; // contracts delivered this run: reputation
   readonly kills: number; // enemy ships destroyed this run: notoriety
   readonly valueTier: number; // ship-value danger tier as of the last launch (see danger.ts)
@@ -26,7 +28,7 @@ export type Run = {
   // The score, kept as three separate columns.
   readonly peakShipValue: number; // the most the ship's parts were worth at any launch
   readonly cargoEarned: number; // total paid for delivered contracts
-  readonly bountiesEarned: number; // total paid for kills
+  readonly bountiesEarned: number; // total paid for kills and for salvage sold
 };
 
 // An action either succeeds with a new Run or explains why it can't happen.
@@ -46,6 +48,7 @@ export function newRun(random: Random = Math.random, econ: Economy = ECONOMY): R
     docked: 0,
     offers: generateOffers(1, 0, 0, random, econ),
     cargo: [],
+    salvage: [],
     delivered: 0,
     kills: 0,
     valueTier: 1,
@@ -69,8 +72,10 @@ export function launchProblems(run: Run, catalog: PartCatalog = PARTS, econ: Eco
   const stats = computeShipStats(run.ship, run.crew, catalog);
   if (run.crew > stats.crewCapacity) problems.push(`${run.crew - stats.crewCapacity} crew have no berth. Add crew modules or fire crew.`);
   if (run.crew === 0) problems.push("No crew to fly the ship.");
-  const loaded = cargoUnits(run.cargo);
-  if (loaded > stats.cargoCapacity) problems.push(`Cargo is over capacity (${loaded} / ${stats.cargoCapacity}). Unload a contract or add cargo bays.`);
+  const loaded = holdUsed(run, econ);
+  if (loaded > stats.cargoCapacity) {
+    problems.push(`Cargo is over capacity (${loaded} / ${stats.cargoCapacity}). Unload a contract, sell salvage or add cargo bays.`);
+  }
   if (stats.fuelCapacity > 0 && run.fuel <= 0) problems.push("Fuel tank is empty. Refuel before launching.");
   const cost = launchCost(run, econ);
   if (run.money < cost) problems.push(`Launching costs $${cost} but you have $${run.money}.`);
@@ -100,18 +105,29 @@ export const bountyFor = (enemy: Ship, catalog: PartCatalog = PARTS, econ: Econo
   Math.round(shipValue(enemy, catalog) * econ.bountyShare);
 
 // What a flight changed, however it ended, the danger tier it flew at, and whether it was a boss trip that destroyed the boss.
-export type TripResult = { fuel: number; ship: Ship; bounty: number; kills: number; danger: number; boss: boolean; bossKilled: boolean };
+// `salvage` is what was picked up on the way.
+export type TripResult = {
+  fuel: number;
+  ship: Ship;
+  bounty: number;
+  kills: number;
+  salvage: readonly Salvage[];
+  danger: number;
+  boss: boolean;
+  bossKilled: boolean;
+};
 
 // An arrived trip counts toward the next boss when it flew at top danger, unless it was a boss trip
 // and the boss survived: then the boss is still out there for the next trip.
 const countsTowardBoss = (trip: TripResult, danger: Danger): boolean =>
   trip.danger === danger.levels.length && (!trip.boss || trip.bossKilled);
 
-// Fuel burned, damage taken (lost parts are gone), bounties earned and kills made.
+// Fuel burned, damage taken (lost parts are gone), bounties earned, kills made and salvage picked up.
 export const afterFlight = (run: Run, trip: TripResult): Run => ({
   ...run,
   fuel: trip.fuel,
   ship: trip.ship,
+  salvage: [...run.salvage, ...trip.salvage],
   money: run.money + trip.bounty,
   bountiesEarned: run.bountiesEarned + trip.bounty,
   kills: run.kills + trip.kills,
