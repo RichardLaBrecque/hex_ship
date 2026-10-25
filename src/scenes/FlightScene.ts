@@ -461,11 +461,12 @@ export class FlightScene implements Scene {
     ctx.restore();
 
     // Planets with cargo bound for them are green; the rest grey. The planet the ship left gets no arrow.
-    // Planets within half the fuel range get a dot by their name.
+    // Each label gives the planet's distance, and planets within half the fuel range get a dot by it.
     const inRange = this.inHalfRange();
     PLANETS.forEach((planet, i) => {
       if (i === this.origin) return;
-      this.renderEdgeArrow(ctx, width, height, planet, this.isBoundFor(i) ? THEME.good : THEME.muted, planet.name, inRange.includes(i));
+      const label = `${planet.name} ${Math.round(distance(this.player.body, planet))}`;
+      this.renderEdgeArrow(ctx, width, height, planet, this.isBoundFor(i) ? THEME.good : THEME.muted, label, inRange.includes(i));
     });
     for (const enemy of this.enemies) this.renderEdgeArrow(ctx, width, height, enemy.vessel.body, THEME.bad);
     this.renderHud(ctx, width, height);
@@ -633,12 +634,16 @@ export class FlightScene implements Scene {
     ctx.fill();
     ctx.restore();
     if (label) {
-      // Pulled in towards the centre so it stays on screen.
-      const inward = Math.atan2(height / 2 - y, width / 2 - x);
-      const labelX = x + Math.cos(inward) * 34;
-      const labelY = y + Math.sin(inward) * 22;
-      drawText(ctx, label, labelX, labelY, { align: "center", size: 12, bold: true, color });
-      if (inRange) drawRangeDot(ctx, labelX - ctx.measureText(label).width / 2 - 8, labelY);
+      // Beside an arrow on a side edge, reading away from it; above or below one on the top or bottom edge.
+      const style = { size: 12, bold: true, color };
+      ctx.font = "600 12px system-ui, sans-serif";
+      const textWidth = ctx.measureText(label).width;
+      const onRight = x >= width - margin - 1;
+      const onLeft = x <= margin + 1;
+      const left = onRight ? x - 18 - textWidth : onLeft ? x + 28 : x - textWidth / 2; // room for the dot on the left
+      const labelY = onRight || onLeft ? y : y + (y < height / 2 ? 22 : -22);
+      drawText(ctx, label, left, labelY, { ...style, align: "left" });
+      if (inRange) drawRangeDot(ctx, left - 8, labelY);
     }
   }
 
