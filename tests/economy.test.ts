@@ -32,6 +32,8 @@ const TEST_ECONOMY: Economy = {
   grandHaul: { units: 50, basePay: 10 },
   bountyShare: 0.5,
   salvageUnits: 5,
+  salvageChance: 0.5,
+  salvageMax: 2,
 };
 
 // bridge (2 berths) + rear engine + cargo bay (10 units) + fuel tank (30 units). Needs 2 crew.

@@ -41,6 +41,7 @@ export const BURSTS = {
   shieldHit: { count: 10, speed: { min: 40, max: 140 }, life: { min: 0.2, max: 0.45 }, size: { min: 1, max: 2.5 }, colors: ["#bfe0ff", "#3d8fd6"] },
   intercept: { count: 10, speed: { min: 40, max: 160 }, life: { min: 0.2, max: 0.5 }, size: { min: 1, max: 2.5 }, colors: ["#ffffff", "#e8c547"] },
   partDestroyed: { count: 26, speed: { min: 30, max: 220 }, life: { min: 0.3, max: 0.9 }, size: { min: 1.5, max: 4 }, colors: ["#fff3c4", "#ffb347", "#d9622b"] },
+  salvaged: { count: 14, speed: { min: 30, max: 120 }, life: { min: 0.2, max: 0.5 }, size: { min: 1, max: 2.5 }, colors: ["#fff3c4", "#e8c547"] },
   shipDestroyed: { count: 90, speed: { min: 20, max: 320 }, life: { min: 0.5, max: 1.6 }, size: { min: 2, max: 6 }, colors: ["#ffffff", "#fff3c4", "#ffb347", "#d9622b", "#7a8899"] },
 } satisfies Record<string, Burst>;
 

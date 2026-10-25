@@ -4,6 +4,7 @@ import { bossTier, DANGER, ENCOUNTERS, ENEMY_TIERS, type Encounter, type EnemyTi
 import { dangerTier, isBossTrip } from "../economy/danger";
 import { PARTS } from "../data/parts";
 import { deliverableAt, holdUsed, planetDistance } from "../economy/contracts";
+import { pickSalvage, salvageUnits, type Salvage } from "../economy/salvage";
 import { bountyFor, type TripResult, type Run } from "../economy/run";
 import type { Input } from "../engine/input";
 import type { Scene } from "../engine/scene";
@@ -21,6 +22,7 @@ import { aiControls, type AiMode } from "../sim/ai";
 import { bounce, findContact, ramDamage } from "../sim/collision";
 import { burnFuel, fuelRange } from "../sim/fuel";
 import { activeThrust, speed, stepBody, type Body } from "../sim/physics";
+import { collectPickups, stepPickups, type Pickup } from "../sim/pickups";
 import { activeLevels, bossDefeated, fillSlots, retarget, vacate, type Slot } from "../sim/roster";
 import { buildEnemy, respawnBody, spawnBody } from "../sim/spawner";
 import { applyHit, hexWorld, isWrecked, makeVessel, setShip, type HitKind, type Vessel } from "../sim/vessel";
@@ -58,6 +60,7 @@ const TRAUMA_KILL = 0.35; // shake from an enemy exploding right next to you; le
 const DANGER_FLASH_SECONDS = 3; // how long "DANGER RISING" shows
 const HALF_RANGE = 0.5; // planets within this share of the fuel range are marked: enough fuel to get there and back
 const TRAUMA_KILL_RANGE = 600; // pixels at which an enemy exploding no longer shakes the screen
+const HOLD_FULL_SECONDS = 1; // how long "HOLD FULL" shows after touching salvage with no room for it
 
 // Free flight: the ship can dock at any planet except the one it left.
 export class FlightScene implements Scene {
@@ -69,6 +72,9 @@ export class FlightScene implements Scene {
   private projectiles: Projectile[] = [];
   private beams: Beam[] = [];
   private debris: Debris[] = [];
+  private pickups: Pickup[] = []; // salvage drifting where enemies were destroyed
+  private salvage: Salvage[] = []; // salvage picked up this trip
+  private holdFull = 0; // seconds left showing that salvage didn't fit
   private particles: Particle[] = [];
   private trauma = 0; // screen shake, 0..1
   private danger: number; // rises mid-flight as kills raise notoriety, never falls
@@ -127,7 +133,7 @@ export class FlightScene implements Scene {
       ship: this.player.ship,
       bounty: this.bounty,
       kills: this.kills,
-      salvage: [],
+      salvage: this.salvage,
       danger: this.danger,
       boss: this.bossTrip,
       bossKilled: bossDefeated(this.slots),
@@ -210,6 +216,8 @@ export class FlightScene implements Scene {
       return;
     }
 
+    this.collectSalvage(dt);
+
     const follow = 1 - Math.exp(-CAMERA_FOLLOW * dt);
     this.camera = {
       x: this.camera.x + (player.body.x - this.camera.x) * follow,
@@ -230,6 +238,20 @@ export class FlightScene implements Scene {
     this.danger = now;
     this.encounters = DANGER.levels[now - 1];
     this.dangerFlash = DANGER_FLASH_SECONDS;
+  }
+
+  // Flying into salvage picks it up, as long as the hold has room for it.
+  private collectSalvage(dt: number): void {
+    const player = this.player;
+    const free = player.stats.cargoCapacity - holdUsed(this.options.run) - salvageUnits(this.salvage);
+    const { collected, left, blocked } = collectPickups(this.pickups, player.body, player.radius + FLIGHT.hexSize, free, ECONOMY.salvageUnits);
+    this.pickups = left;
+    for (const p of collected) {
+      this.salvage.push(p.salvage);
+      this.particles.push(...burst(p, BURSTS.salvaged, Math.random, { x: player.body.vx, y: player.body.vy }));
+      this.options.sound.pickup();
+    }
+    this.holdFull = blocked ? HOLD_FULL_SECONDS : Math.max(0, this.holdFull - dt);
   }
 
   // A fresh enemy for slots[index], at `body`.
@@ -323,6 +345,7 @@ export class FlightScene implements Scene {
     this.debris = this.debris
       .map((d) => ({ ...d, x: d.x + d.vx * dt, y: d.y + d.vy * dt, angle: d.angle + d.spin * dt, age: d.age + dt }))
       .filter((d) => d.age < COMBAT.debrisLife);
+    this.pickups = stepPickups(this.pickups, dt);
 
     if (alive) this.emitExhaust(player, this.thrust, dt);
     for (const enemy of this.enemies) this.emitExhaust(enemy.vessel, enemy.thrust, dt);
@@ -396,10 +419,11 @@ export class FlightScene implements Scene {
       this.trauma = addTrauma(this.trauma, throughShield * TRAUMA_PER_DAMAGE + (destroyed ? TRAUMA_PART_LOST : 0));
     }
 
+    // The hit that destroys an enemy breaks it apart, and a few of its parts survive as salvage.
+    const salvaged = v !== this.player && destroyed && isWrecked(v) ? pickSalvage(detached, Math.random) : [];
     for (const part of detached) {
       const p = hexWorld(v, part);
-      this.debris.push({
-        part,
+      const drift = {
         x: p.x,
         y: p.y,
         vx: v.body.vx + (Math.random() * 2 - 1) * COMBAT.debrisSpeed,
@@ -407,7 +431,9 @@ export class FlightScene implements Scene {
         angle: v.body.angle,
         spin: Math.random() * 2 - 1,
         age: 0,
-      });
+      };
+      if (salvaged.includes(part)) this.pickups.push({ ...drift, salvage: { type: part.type, hp: part.hp } });
+      else this.debris.push({ ...drift, part });
     }
   }
 
@@ -467,6 +493,7 @@ export class FlightScene implements Scene {
     const marked = this.inHalfRange();
     PLANETS.forEach((planet, i) => this.renderPlanet(ctx, i, planet, marked.includes(i)));
     this.renderDebris(ctx);
+    this.renderPickups(ctx);
     for (const enemy of this.enemies) {
       this.renderVessel(ctx, enemy.vessel, enemy.thrust, THEME.bad);
       this.renderHullBar(ctx, enemy.vessel);
@@ -485,6 +512,7 @@ export class FlightScene implements Scene {
       this.renderEdgeArrow(ctx, width, height, planet, this.isBoundFor(i) ? THEME.good : THEME.muted, label, inRange.includes(i));
     });
     for (const enemy of this.enemies) this.renderEdgeArrow(ctx, width, height, enemy.vessel.body, THEME.bad);
+    for (const p of this.pickups) this.renderEdgeArrow(ctx, width, height, p, THEME.warn);
     this.renderHud(ctx, width, height);
   }
 
@@ -568,6 +596,26 @@ export class FlightScene implements Scene {
       ctx.rotate(d.angle);
       ctx.globalAlpha = 1 - d.age / COMBAT.debrisLife;
       drawPart(ctx, { ...d.part, hex: hex(0, 0) }, FLIGHT.hexSize, false);
+      ctx.restore();
+    }
+  }
+
+  // Salvage glows with a pulsing ring so it stands out from debris, and blinks when it's about to be lost.
+  private renderPickups(ctx: CanvasRenderingContext2D): void {
+    for (const p of this.pickups) {
+      const blinking = p.age > COMBAT.salvageLife - COMBAT.salvageBlink;
+      if (blinking && Math.floor(this.time * 6) % 2 === 0) continue;
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.globalAlpha = 0.5 + 0.3 * Math.sin(this.time * 5);
+      ctx.strokeStyle = THEME.warn;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(0, 0, FLIGHT.hexSize * 1.6, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+      ctx.rotate(p.angle);
+      drawPart(ctx, { hex: hex(0, 0), type: p.salvage.type, rotation: 0, hp: p.salvage.hp }, FLIGHT.hexSize, false);
       ctx.restore();
     }
   }
@@ -671,7 +719,9 @@ export class FlightScene implements Scene {
     drawText(ctx, `Speed ${Math.round(speed(this.player.body))}`, 20, 70, { color: THEME.muted });
     drawText(ctx, `Hull ${Math.round(s.hull)} / ${Math.round(s.maxHull)}`, 20, 90, { color: THEME.muted });
     drawText(ctx, `Shield ${Math.round(totalShield(this.player.shields))} / ${Math.round(s.shieldMax)}`, 20, 110, { color: THEME.muted });
-    drawText(ctx, `Cargo ${holdUsed(this.options.run)} / ${s.cargoCapacity} units`, 20, 130, { color: THEME.muted });
+    const hold = holdUsed(this.options.run) + salvageUnits(this.salvage);
+    const salvaged = this.salvage.length > 0 ? `  ·  ${this.salvage.length} salvaged` : "";
+    drawText(ctx, `Cargo ${hold} / ${s.cargoCapacity} units${salvaged}`, 20, 130, { color: this.holdFull > 0 ? THEME.bad : THEME.muted });
     const boss = this.bossTrip ? "  ·  BOSS" : "";
     drawText(ctx, `Day ${this.options.run.day}  ·  $${this.options.run.money}  ·  Danger ${this.danger}${boss}`, 20, 150, {
       color: this.bossTrip ? THEME.bad : THEME.muted,
@@ -684,6 +734,9 @@ export class FlightScene implements Scene {
 
     if (this.dangerFlash > 0) {
       drawText(ctx, `DANGER RISING: ${this.danger}`, width / 2, 70, { align: "center", size: 22, bold: true, color: THEME.bad });
+    }
+    if (this.holdFull > 0) {
+      drawText(ctx, "HOLD FULL: no room for salvage", width / 2, 100, { align: "center", size: 18, bold: true, color: THEME.warn });
     }
     if (this.victoryTimer !== null) {
       drawText(ctx, "FLAGSHIP DESTROYED", width / 2, height / 2 - 110, { align: "center", size: 30, bold: true, color: THEME.good });

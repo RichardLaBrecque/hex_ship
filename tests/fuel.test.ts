@@ -29,6 +29,8 @@ const TEST_ECONOMY: Economy = {
   grandHaul: { units: 1, basePay: 0 },
   bountyShare: 0,
   salvageUnits: 0,
+  salvageChance: 0,
+  salvageMax: 0,
 };
 
 const TUNING = { hexSize: 10, thrustScale: 10, reverseFactor: 0.5, turnScale: 1, gyroResponse: 4, torqueScale: 1, spinDrag: 1, drag: 0.5, dockSpeed: 50 };

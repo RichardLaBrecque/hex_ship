@@ -19,6 +19,8 @@ export const COMBAT = {
   debrisLife: 4, // seconds a broken-off part drifts before fading out
   debrisSpeed: 40, // pixels/s of random drift added to broken-off parts
   wreckDelay: 2, // seconds between losing the core and the Game Over screen
+  salvageLife: 30, // seconds salvage drifts before it's lost; it blinks for the last salvageBlink
+  salvageBlink: 5,
   ramBounce: 0.4, // share of the closing speed ships keep when they bounce apart; 0 sticks together, 1 is fully elastic
   ramSafeSpeed: 60, // pixels/s; ships closing slower than this bump without damage
   ramDamage: 0.12, // damage to each of the two parts that struck, per pixel/s of closing speed above ramSafeSpeed
@@ -79,6 +81,8 @@ export const ECONOMY = {
   // Parts salvaged from wrecks ride in the hold, sharing it with contracts. Selling one pays what the part is worth
   // as it is, damage and all, and counts toward bounties; installing one puts it on the ship for free.
   salvageUnits: 5, // hold space each salvaged part takes: half a cargo bay
+  salvageChance: 0.35, // chance each part left on a destroyed enemy survives as salvage
+  salvageMax: 2, // most salvage one destroyed enemy drops
 };
 
 export type Economy = typeof ECONOMY;

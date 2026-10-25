@@ -103,6 +103,12 @@ export class Sound {
     this.tone("sine", 90, 30, 1.0, 0.5 * volume);
   }
 
+  // Salvage picked up: a quick rising chirp.
+  pickup(): void {
+    if (!this.ready("pickup")) return;
+    this.tone("triangle", 880, 1320, 0.12, 0.18);
+  }
+
   // Docked: two rising notes.
   dock(): void {
     if (!this.ready("dock")) return;

@@ -1,6 +1,6 @@
 import { Sound } from "./audio/sound";
 import { PLANETS } from "./data/balance";
-import { afterFlight, arrive, launch, newRun, towBack, type Run } from "./economy/run";
+import { afterFlight, arrive, launch, newRun, towBack, type Run, type TripResult } from "./economy/run";
 import { deliveredGrandHaul } from "./economy/victory";
 import { Input } from "./engine/input";
 import { startLoop } from "./engine/loop";
@@ -78,12 +78,12 @@ function startTrip(docked: Run): void {
             : run.cargo.length > 0
               ? `No cargo bound for ${PLANETS[planet].name}.`
               : "Arrived with an empty hold.";
-        openStation(run, withBounty(report, trip.bounty));
+        openStation(run, withTrip(report, trip));
       },
       onAbort: (trip) =>
         trip.fuel > 0
-          ? openStation(afterFlight(flying, trip), withBounty("Turned back. Wages aren't refunded.", trip.bounty))
-          : openStation(towBack(afterFlight(flying, trip)), withBounty("Towed back on an empty tank.", trip.bounty)),
+          ? openStation(afterFlight(flying, trip), withTrip("Turned back. Wages aren't refunded.", trip))
+          : openStation(towBack(afterFlight(flying, trip)), withTrip("Towed back on an empty tank.", trip)),
       onDestroyed: () => endRun(flying, "destroyed"),
       onVictory: (trip) => endRun(afterFlight(flying, trip), "warrior"),
     }),
@@ -126,7 +126,13 @@ function drawTurnSideways(): void {
 
 const muteButton = (): Rect => scenes.scene?.muteButton?.(width, height) ?? muteButtonRect(width);
 
-const withBounty = (report: string, bounty: number): string => (bounty > 0 ? `${report} Bounties: +$${bounty}` : report);
+// The trip's report, plus the bounties it earned and the salvage it picked up, if any.
+function withTrip(report: string, trip: TripResult): string {
+  const bounty = trip.bounty > 0 ? ` Bounties: +$${trip.bounty}.` : "";
+  const count = trip.salvage.length;
+  const salvage = count > 0 ? ` Salvaged ${count} part${count === 1 ? "" : "s"}: see Cargo.` : "";
+  return `${report}${bounty}${salvage}`;
+}
 
 const saved = loadRun();
 openStation(saved ?? newRun(), saved ? `Welcome back. Day ${saved.day}, $${saved.money}.` : undefined);

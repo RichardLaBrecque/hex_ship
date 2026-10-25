@@ -3,11 +3,17 @@ import { PARTS, type PartCatalog, type PartId } from "../data/parts";
 import { hexKey, type Hex } from "../hex/hex";
 import { partAt } from "../ship/ship";
 import { fitFuel } from "./fuel";
-import type { Outcome, Run } from "./run";
+import type { Outcome, Random, Run } from "./run";
 import { sellValue } from "./shop";
 
 // A part salvaged from a wreck, riding in the hold with the damage it had when it broke off.
 export type Salvage = { readonly type: PartId; readonly hp: number };
+
+// Which of a destroyed enemy's remaining parts survive as salvage: each has salvageChance, up to salvageMax.
+// The bridge never does.
+export function pickSalvage<T extends Salvage>(parts: readonly T[], random: Random, econ: Economy = ECONOMY): T[] {
+  return parts.filter((part) => part.type !== "bridge" && random() < econ.salvageChance).slice(0, econ.salvageMax);
+}
 
 export const salvageUnits = (salvage: readonly Salvage[], econ: Economy = ECONOMY): number => salvage.length * econ.salvageUnits;
 
