@@ -56,7 +56,7 @@ describe("applyHit", () => {
   it("drains the shield before damaging the part", () => {
     // shield generator gives 40 shield
     const v = vessel("player", build([0, 0, "bridge", 0], [1, 0, "shield", 0]), at(0, 0));
-    const hit = applyHit(v, "0,0", 45, "shell", SIZE, TEST_PARTS);
+    const hit = applyHit(v, "0,0", 45, "beam", SIZE, TEST_PARTS);
     expect(v.shields.get("1,0")).toBe(0);
     expect(hit.throughShield).toBe(5);
     expect(v.ship.get("0,0")!.hp).toBe(45);
@@ -68,6 +68,33 @@ describe("applyHit", () => {
     expect(v.shields.get("1,0")).toBe(35);
     expect(hit.throughShield).toBe(0);
     expect(v.ship.get("0,0")!.hp).toBe(50);
+  });
+
+  it("lets a cannon shell drain the shield at double its damage", () => {
+    const v = vessel("player", build([0, 0, "bridge", 0], [1, 0, "shield", 0]), at(0, 0));
+    const hit = applyHit(v, "0,0", 25, "shell", SIZE, TEST_PARTS);
+    // 20 damage empties the 40 shield; the other 5 gets through
+    expect(v.shields.get("1,0")).toBe(0);
+    expect(hit.throughShield).toBe(5);
+    expect(v.ship.get("0,0")!.hp).toBe(45);
+  });
+
+  it("lets a laser do a quarter damage to armor", () => {
+    const v = vessel("player", build([0, 0, "bridge", 0], [1, 0, "armor", 0]), at(0, 0));
+    applyHit(v, "1,0", 20, "beam", SIZE, TEST_PARTS);
+    expect(v.ship.get("1,0")!.hp).toBe(95);
+  });
+
+  it("lets a missile do double damage to armor", () => {
+    const v = vessel("player", build([0, 0, "bridge", 0], [1, 0, "armor", 0]), at(0, 0));
+    applyHit(v, "1,0", 20, "missile", SIZE, TEST_PARTS);
+    expect(v.ship.get("1,0")!.hp).toBe(60);
+  });
+
+  it("does full damage to parts that aren't armor", () => {
+    const v = vessel("player", build([0, 0, "bridge", 0], [1, 0, "armor", 0]), at(0, 0));
+    applyHit(v, "0,0", 20, "missile", SIZE, TEST_PARTS);
+    expect(v.ship.get("0,0")!.hp).toBe(30);
   });
 
   it("leaves parts more than two hexes from the generator unshielded", () => {
@@ -154,9 +181,9 @@ describe("fireWeapons", () => {
     expect(volley.beams[0].damage).toBe(5);
   });
 
-  describe("intercepting missiles", () => {
-    const missile = (side: Side, x: number, y: number): Projectile => ({
-      kind: "missile",
+  describe("intercepting missiles and shells", () => {
+    const missile = (side: Side, x: number, y: number, kind: Projectile["kind"] = "missile"): Projectile => ({
+      kind,
       side,
       x,
       y,
@@ -172,7 +199,7 @@ describe("fireWeapons", () => {
       const incoming = missile("enemy", 60, 0);
       const volley = fireWeapons(shooter, [dot("enemy", 90, 0)], [incoming], 0.01, SIZE, TEST_PARTS);
       expect(volley.intercepts).toHaveLength(1);
-      expect(volley.intercepts[0].missile).toBe(incoming);
+      expect(volley.intercepts[0].shot).toBe(incoming);
       expect(volley.intercepts[0].beam.to).toEqual({ x: 60, y: 0 });
       expect(volley.beams).toHaveLength(0);
     });
@@ -198,7 +225,23 @@ describe("fireWeapons", () => {
       const first = missile("enemy", 60, 0);
       const second = missile("enemy", 60, 9);
       const volley = fireWeapons(shooter, [], [first, second], 0.01, SIZE, TEST_PARTS);
-      expect(volley.intercepts.map((i) => i.missile)).toEqual([first, second]);
+      expect(volley.intercepts.map((i) => i.shot)).toEqual([first, second]);
+    });
+
+    it("shoots down an incoming shell", () => {
+      const shooter = vessel("player", build([0, 0, "bridge", 0], [1, 0, "laser", 0]), at(0, 0));
+      const incoming = missile("enemy", 60, 0, "shell");
+      const volley = fireWeapons(shooter, [dot("enemy", 90, 0)], [incoming], 0.01, SIZE, TEST_PARTS);
+      expect(volley.intercepts.map((i) => i.shot)).toEqual([incoming]);
+      expect(volley.beams).toHaveLength(0);
+    });
+
+    it("goes after missiles before shells", () => {
+      const shooter = vessel("player", build([0, 0, "bridge", 0], [1, 0, "laser", 0]), at(0, 0));
+      const shell = missile("enemy", 60, 0, "shell");
+      const incoming = missile("enemy", 60, 9);
+      const volley = fireWeapons(shooter, [], [shell, incoming], 0.01, SIZE, TEST_PARTS);
+      expect(volley.intercepts.map((i) => i.shot)).toEqual([incoming]);
     });
 
     it("leaves missiles to weapons that can intercept", () => {

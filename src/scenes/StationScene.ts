@@ -951,7 +951,8 @@ function partDetails(id: PartId): string[] {
     const w = def.weapon;
     lines.push(`Damage ${w.damage} × ${w.fireRate}/s`);
     lines.push(`Range ${w.range} · Arc ±${w.arc}°`);
-    if (w.intercept > 0) lines.push(`Shoots down 1 missile every ${fmt(1 / w.intercept)}s`);
+    lines.push(`Shield drain ×${COMBAT.shieldDrain[w.kind]} · Vs armor ×${COMBAT.armorDamage[w.kind]}`);
+    if (w.intercept > 0) lines.push(`Shoots down 1 missile or shell every ${fmt(1 / w.intercept)}s`);
   }
   return lines;
 }

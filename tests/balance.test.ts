@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ECONOMY, PLANETS } from "../src/data/balance";
+import { COMBAT, ECONOMY, PLANETS } from "../src/data/balance";
 import { BOSS, bossTier, DANGER, ENEMY_TIERS } from "../src/data/enemies";
 import { BUILDABLE, PARTS } from "../src/data/parts";
 import { repairCost, sellValue } from "../src/economy/shop";
@@ -41,6 +41,24 @@ describe("balance", () => {
         expect(repairCost(new Map([["0,0", part]])), `${type} at ${hp} hp`).toBeLessThan(replace);
       }
     }
+  });
+
+  describe("rock/paper/scissors", () => {
+    it("lasers bounce off armor, which missiles crack", () => {
+      expect(COMBAT.armorDamage.beam).toBeLessThan(1);
+      expect(COMBAT.armorDamage.missile).toBeGreaterThan(1);
+    });
+
+    it("shields stop missiles, which cannons overload", () => {
+      expect(COMBAT.shieldDrain.missile).toBeLessThan(1);
+      expect(COMBAT.shieldDrain.shell).toBeGreaterThan(1);
+    });
+
+    it("only lasers can shoot down missiles and shells", () => {
+      expect(PARTS.laser.weapon!.intercept).toBeGreaterThan(0);
+      expect(PARTS.cannon.weapon!.intercept).toBe(0);
+      expect(PARTS.missile.weapon!.intercept).toBe(0);
+    });
   });
 
   it("one laser shoots down every other missile from a missile pod", () => {

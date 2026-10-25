@@ -83,8 +83,8 @@ export type HitKind = WeaponKind | "ram";
 // throughShield is the damage the shields didn't stop.
 export type Hit = { throughShield: number; destroyed: PlacedPart | null; detached: PlacedPart[] };
 
-// Shields covering the struck part soak the hit first, and missiles drain them at a discount.
-// Whatever gets through damages the part that was struck.
+// Shields covering the struck part soak the hit first, drained at the hit's shieldDrain.
+// Whatever gets through damages the part that was struck, scaled by armorDamage if it's armor.
 export function applyHit(
   v: Vessel,
   key: string,
@@ -94,10 +94,10 @@ export function applyHit(
   catalog: PartCatalog = PARTS,
 ): Hit {
   const covering = coveringShields(v.ship, key, COMBAT.shieldReach, catalog);
-  const cost = kind === "missile" ? COMBAT.shieldMissileCost : 1;
-  const { shields, leftover } = absorbWithShields(v.shields, covering, damage, cost);
+  const { shields, leftover } = absorbWithShields(v.shields, covering, damage, COMBAT.shieldDrain[kind]);
   v.shields = shields;
-  const result = damagePart(v.ship, key, leftover);
+  const armor = v.ship.get(key)?.type === "armor";
+  const result = damagePart(v.ship, key, armor ? leftover * COMBAT.armorDamage[kind] : leftover);
   if (result.ship !== v.ship) setShip(v, result.ship, size, catalog);
   return { throughShield: leftover, destroyed: result.destroyed, detached: result.detached };
 }

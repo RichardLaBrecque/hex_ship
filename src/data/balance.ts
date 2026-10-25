@@ -23,7 +23,12 @@ export const COMBAT = {
   ramSafeSpeed: 60, // pixels/s; ships closing slower than this bump without damage
   ramDamage: 0.12, // damage to each of the two parts that struck, per pixel/s of closing speed above ramSafeSpeed
   shieldReach: 2, // a shield generator covers parts up to this many hexes away
-  shieldMissileCost: 0.25, // shield charge a point of missile damage drains: shields cut missile damage by 75%
+  // Rock/paper/scissors, by what struck the ship. Lasers also shoot down missiles and shells (laser `intercept` in parts.ts).
+  // Shield charge drained per point of damage: how fast each hit depletes a shield, not how hard it hits the part.
+  // Cannons drain shields twice as fast; missiles drain them at a quarter of the rate.
+  shieldDrain: { beam: 1, shell: 2, missile: 0.25, ram: 1 },
+  // Damage multiplier against Armor Plate: lasers bounce off it, and missiles crack it.
+  armorDamage: { beam: 0.25, shell: 1, missile: 2, ram: 1 },
 };
 
 export type Combat = typeof COMBAT;

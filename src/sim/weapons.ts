@@ -67,13 +67,14 @@ export function weaponRange(v: Vessel, catalog: PartCatalog = PARTS): number {
   return range === Infinity ? 0 : range;
 }
 
-// A missile shot down by a laser; the caller removes it from flight.
-export type Intercept = { beam: Beam; missile: Projectile };
+// A missile or shell shot down by a laser; the caller removes it from flight.
+export type Intercept = { beam: Beam; shot: Projectile };
 
 export type Volley = { projectiles: Projectile[]; beams: BeamShot[]; intercepts: Intercept[] };
 
 // Counts down reloads and fires every loaded weapon that can bear on a target.
-// A weapon that can intercept shoots down the first incoming missile it can reach, then reloads for 1 / intercept rate.
+// A weapon that can intercept shoots down the first incoming missile it can reach, or else the first shell,
+// then reloads for 1 / intercept rate.
 // Otherwise each weapon shoots at the first target in `targets` it can reach.
 export function fireWeapons(
   v: Vessel,
@@ -96,18 +97,14 @@ export function fireWeapons(
 
     const mount = mountOf(v, part, size);
     const intercept = interceptRate(v, part, catalog);
-    const missile =
+    const reachable = (p: Projectile): boolean =>
+      p.side !== v.side && !volley.intercepts.some((i) => i.shot === p) && bearingTo(mount, weapon, p) !== null;
+    const shot =
       intercept > 0
-        ? incoming.find(
-            (p) =>
-              p.kind === "missile" &&
-              p.side !== v.side &&
-              !volley.intercepts.some((i) => i.missile === p) &&
-              bearingTo(mount, weapon, p) !== null,
-          )
+        ? (incoming.find((p) => p.kind === "missile" && reachable(p)) ?? incoming.find((p) => p.kind === "shell" && reachable(p)))
         : undefined;
-    if (missile) {
-      volley.intercepts.push({ beam: { from: mount, to: { x: missile.x, y: missile.y }, age: 0 }, missile });
+    if (shot) {
+      volley.intercepts.push({ beam: { from: mount, to: { x: shot.x, y: shot.y }, age: 0 }, shot });
       v.reload.set(key, 1 / intercept);
       continue;
     }
