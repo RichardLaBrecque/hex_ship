@@ -58,6 +58,8 @@ export const ECONOMY = {
   offersPerStation: 4,
   openShare: 0.25, // chance an offer is an open contract: delivered to any other planet, at a low fixed rate
   openPayShare: 0.5, // an open contract pays this share of its tier's pay, however far it goes
+  dumpPenaltyShare: 0.1, // dumping a contract short of its destination costs this share of its pay
+  dumpReputationLoss: 3, // ...and takes this many deliveries off your reputation
   payDistance: 8000, // pixels, about one hop to a nearest neighbour; a contract this far pays its tier's pay, and farther pays more in proportion
   payBonusPerDelivery: 0.03, // reputation: every contract delivered adds 3% to contract pay
   topTierShare: 0.5, // chance an offer comes from your best unlocked contract tier rather than any unlocked tier

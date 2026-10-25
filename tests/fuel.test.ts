@@ -22,6 +22,8 @@ const TEST_ECONOMY: Economy = {
   topTierShare: 1,
   openShare: 0,
   openPayShare: 0,
+  dumpPenaltyShare: 0,
+  dumpReputationLoss: 0,
   payDistance: 1,
   contractTiers: [{ rank: "ONLY", unlockAt: 0, units: { min: 1, max: 1 }, pay: { min: 1, max: 1 } }],
   bountyShare: 0,

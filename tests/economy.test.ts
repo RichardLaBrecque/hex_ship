@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Economy, Planet } from "../src/data/balance";
-import { generateOffers, loadContract, reputation, unloadContract, type Contract } from "../src/economy/contracts";
+import { dumpContract, generateOffers, loadContract, reputation, unloadContract, type Contract } from "../src/economy/contracts";
 import { fireCrew, hireCrew, hiringFees } from "../src/economy/crew";
 import { afterFlight, arrive, bountyFor, launch, launchCost, launchProblems, towBack, type Outcome, type Run, type TripResult } from "../src/economy/run";
 import { buyPart, repairAll, repairCost, sellPart, sellValue } from "../src/economy/shop";
@@ -22,6 +22,8 @@ const TEST_ECONOMY: Economy = {
   topTierShare: 0.5,
   openShare: 0.5,
   openPayShare: 0.5,
+  dumpPenaltyShare: 0.1,
+  dumpReputationLoss: 3,
   payDistance: 1000,
   contractTiers: [
     { rank: "LOW", unlockAt: 0, units: { min: 1, max: 10 }, pay: { min: 10, max: 20 } },
@@ -248,6 +250,32 @@ describe("contracts", () => {
     const run = ok(unloadContract(testRun({ cargo: [CONTRACT("A", 4)] }), "A"));
     expect(run.cargo).toEqual([]);
     expect(run.offers.map((c) => c.id)).toEqual(["A"]);
+  });
+
+  it("dumps cargo loaded at another planet for 10% of its pay and 3 deliveries of reputation", () => {
+    // 4 × $25 = $100 → $10 penalty
+    const run = ok(dumpContract(testRun({ docked: 0, delivered: 7, cargo: [CONTRACT("A", 4, 25, { from: 2, to: 1 })] }), "A", TEST_ECONOMY));
+    expect(run.cargo).toEqual([]);
+    expect(run.offers).toEqual([]);
+    expect(run.money).toBe(990);
+    expect(run.delivered).toBe(4);
+  });
+
+  it("rounds the dump penalty up and never takes reputation below zero", () => {
+    // 3 × $7 = $21 → $2.10 → $3
+    const run = ok(dumpContract(testRun({ docked: 0, delivered: 1, cargo: [CONTRACT("A", 3, 7, { from: 2, to: null })] }), "A", TEST_ECONOMY));
+    expect(run.money).toBe(997);
+    expect(run.delivered).toBe(0);
+  });
+
+  it("dumps even into debt", () => {
+    const run = ok(dumpContract(testRun({ money: 5, docked: 0, cargo: [CONTRACT("A", 4, 25, { from: 2, to: 1 })] }), "A", TEST_ECONOMY));
+    expect(run.money).toBe(-5);
+  });
+
+  it("won't dump cargo loaded here, which goes back on the board for free", () => {
+    const run = testRun({ docked: 0, cargo: [CONTRACT("A", 4)] });
+    expect(reason(dumpContract(run, "A", TEST_ECONOMY))).toBe("Cargo loaded here goes back on the board for free.");
   });
 
   it("can't unload cargo loaded at another planet", () => {

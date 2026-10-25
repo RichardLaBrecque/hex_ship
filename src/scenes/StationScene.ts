@@ -1,6 +1,6 @@
 import { COMBAT, ECONOMY, FLIGHT, PLANETS } from "../data/balance";
 import { BUILDABLE, PARTS, type PartId } from "../data/parts";
-import { cargoUnits, contractPay, loadContract, planetDistance, reputation, unloadContract, type Contract } from "../economy/contracts";
+import { cargoUnits, contractPay, dumpContract, dumpPenalty, loadContract, planetDistance, reputation, unloadContract, type Contract } from "../economy/contracts";
 import { fireCrew, hireCrew, hiringFees, wages } from "../economy/crew";
 import { dangerOutlook, type DangerOutlook } from "../economy/danger";
 import { refuel, refuelCost } from "../economy/fuel";
@@ -86,6 +86,7 @@ export class StationScene implements Scene {
   private touch = false; // the player is on a touch screen, so the station uses its touch layout
   private tab: StationTab = "parts"; // the touch layout's open tab
   private confirmingEnd = false; // End run was pressed once; pressing it again ends the run
+  private confirmingDump: string | null = null; // id of the contract whose card was pressed once to dump it; pressing it again dumps it
 
   // Layout, recalculated every render from the canvas size.
   private hexSize = MAX_HEX_SIZE;
@@ -135,6 +136,7 @@ export class StationScene implements Scene {
     if (input.wasPressed("Escape")) {
       this.deselect();
       this.confirmingEnd = false;
+      this.confirmingDump = null;
     }
     if (input.wasPressed("KeyR")) this.rotate(input.isDown("ShiftLeft") || input.isDown("ShiftRight") ? -1 : 1);
     if (input.wasPressed("Delete") || input.wasPressed("Backspace")) this.sellInspected();
@@ -181,6 +183,9 @@ export class StationScene implements Scene {
   }
 
   private handleLeftClick(): void {
+    // Dumping cargo takes two presses on its card; a click anywhere else calls it off.
+    const armed = this.confirmingDump;
+    this.confirmingDump = null;
     // Ending a run takes two presses; a click anywhere else calls it off.
     if (pointInRect(this.mouse, this.endRunButton)) {
       if (this.confirmingEnd) {
@@ -207,7 +212,12 @@ export class StationScene implements Scene {
     }
     const card = this.contractCards.find((c) => pointInRect(this.mouse, c.rect));
     if (card) {
-      this.apply(card.loaded ? unloadContract(this.run, card.contract.id) : loadContract(this.run, card.contract.id));
+      const { contract } = card;
+      if (card.loaded && contract.from !== this.run.docked) {
+        this.dump(contract, armed === contract.id);
+      } else {
+        this.apply(card.loaded ? unloadContract(this.run, contract.id) : loadContract(this.run, contract.id));
+      }
       return;
     }
     if (pointInRect(this.mouse, this.hireButton)) {
@@ -263,6 +273,25 @@ export class StationScene implements Scene {
     } else {
       this.pending = this.hovered;
     }
+  }
+
+  // Cargo loaded elsewhere can only come off by failing its contract. The first press says what that costs.
+  private dump(contract: Contract, confirmed: boolean): void {
+    if (confirmed) {
+      const outcome = dumpContract(this.run, contract.id);
+      this.apply(outcome);
+      if (outcome.ok) {
+        this.flash(`Dumped ${contract.cargo}: −$${dumpPenalty(contract)}, −${ECONOMY.dumpReputationLoss} reputation.`, THEME.warn, REPORT_SECONDS);
+      }
+      return;
+    }
+    this.confirmingDump = contract.id;
+    const again = this.touch ? "Tap" : "Click";
+    this.flash(
+      `${again} again to dump ${contract.cargo}: the contract fails, costing $${dumpPenalty(contract)} and ${ECONOMY.dumpReputationLoss} deliveries of reputation.`,
+      THEME.warn,
+      REPORT_SECONDS,
+    );
   }
 
   // Turning a part is free.
@@ -981,17 +1010,21 @@ export class StationScene implements Scene {
 
       const tap = this.touch ? "tap" : "click";
       // Cargo loaded at another planet can't come off until it reaches where it's bound.
+      // It can be dumped for a penalty, which takes a second press.
+      const armed = this.confirmingDump === contract.id;
       const [footer, status] = !isLoaded
         ? fits
           ? [`${this.touch ? "Tap" : "Click"} to load`, ""]
           : ["Not enough hold space", "NO ROOM"]
         : contract.from === this.run.docked
           ? [`LOADED · ${tap} to unload`, "LOADED"]
-          : [`ABOARD · from ${PLANETS[contract.from].name}`, "ABOARD"];
+          : armed
+            ? [`${tap} again to dump · −$${dumpPenalty(contract)}`, "DUMP?"]
+            : [`ABOARD · ${tap} to dump`, "ABOARD"];
       this.renderContractCard(ctx, rect, contract, {
         footer,
         status,
-        footerColor: isLoaded ? THEME.good : fits ? THEME.muted : THEME.bad,
+        footerColor: armed ? THEME.bad : isLoaded ? THEME.good : fits ? THEME.muted : THEME.bad,
         textColor: fits ? THEME.text : THEME.muted,
         payColor: fits ? THEME.good : THEME.muted,
       });

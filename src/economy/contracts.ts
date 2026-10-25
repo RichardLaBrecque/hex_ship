@@ -99,5 +99,25 @@ export function unloadContract(run: Run, id: string, planets: readonly Planet[] 
   };
 }
 
+// What dumping a contract costs: a share of its pay, rounded up.
+export const dumpPenalty = (contract: Contract, econ: Economy = ECONOMY): number => Math.ceil(contractPay(contract) * econ.dumpPenaltyShare);
+
+// Gives up a contract loaded at another planet: it's dumped here unpaid, the failed contract costs dumpPenalty
+// (even into debt), and reputation loses dumpReputationLoss deliveries. Cargo loaded here goes back on the board instead.
+export function dumpContract(run: Run, id: string, econ: Economy = ECONOMY): Outcome {
+  const contract = run.cargo.find((c) => c.id === id);
+  if (!contract) return { ok: false, reason: "That contract isn't loaded." };
+  if (contract.from === run.docked) return { ok: false, reason: "Cargo loaded here goes back on the board for free." };
+  return {
+    ok: true,
+    run: {
+      ...run,
+      cargo: run.cargo.filter((c) => c.id !== id),
+      money: run.money - dumpPenalty(contract, econ),
+      delivered: Math.max(0, run.delivered - econ.dumpReputationLoss),
+    },
+  };
+}
+
 // Inclusive of both ends.
 const randomInt = (min: number, max: number, random: Random): number => min + Math.floor(random() * (max - min + 1));
