@@ -19,7 +19,7 @@ import { engineFlame, shipValue, type PlacedPart } from "../ship/ship";
 import { computeShipStats } from "../ship/stats";
 import { aiControls, type AiMode } from "../sim/ai";
 import { bounce, findContact, ramDamage } from "../sim/collision";
-import { burnFuel } from "../sim/fuel";
+import { burnFuel, fuelRange } from "../sim/fuel";
 import { activeThrust, speed, stepBody, type Body } from "../sim/physics";
 import { activeLevels, bossDefeated, fillSlots, retarget, vacate, type Slot } from "../sim/roster";
 import { buildEnemy, respawnBody, spawnBody } from "../sim/spawner";
@@ -55,6 +55,7 @@ const TRAUMA_PER_DAMAGE = 1 / 60; // screen shake added per point of damage to t
 const TRAUMA_PART_LOST = 0.3; // extra shake when the player loses a part
 const TRAUMA_KILL = 0.35; // shake from an enemy exploding right next to you; less further away
 const DANGER_FLASH_SECONDS = 3; // how long "DANGER RISING" shows
+const HALF_RANGE = 0.5; // planets within this share of the fuel range are marked: enough fuel to get there and back
 const TRAUMA_KILL_RANGE = 600; // pixels at which an enemy exploding no longer shakes the screen
 
 // Free flight: the ship can dock at any planet except the one it left.
@@ -424,6 +425,16 @@ export class FlightScene implements Scene {
   }
 
   // The nearest planet to the ship other than the one it left.
+  // Planets other than the one the ship left, within HALF_RANGE of what the fuel aboard flies from here, nearest first.
+  // Same straight-line estimate as the station's fuel range.
+  private inHalfRange(): number[] {
+    const reach = fuelRange(this.player.stats, this.fuel) * HALF_RANGE;
+    const near = (i: number): number => distance(this.player.body, PLANETS[i]);
+    return PLANETS.map((_, i) => i)
+      .filter((i) => i !== this.origin && near(i) <= reach)
+      .sort((a, b) => near(a) - near(b));
+  }
+
   private nearestPlanet(): Planet {
     const others = PLANETS.filter((_, i) => i !== this.origin);
     return others.reduce((best, p) => (distance(this.player.body, p) < distance(this.player.body, best) ? p : best));
@@ -437,7 +448,8 @@ export class FlightScene implements Scene {
     const shake = shakeOffset(this.trauma, Math.random);
     ctx.save();
     ctx.translate(width / 2 - this.camera.x + shake.x, height / 2 - this.camera.y + shake.y);
-    PLANETS.forEach((planet, i) => this.renderPlanet(ctx, i, planet));
+    const marked = this.inHalfRange();
+    PLANETS.forEach((planet, i) => this.renderPlanet(ctx, i, planet, marked.includes(i)));
     this.renderDebris(ctx);
     for (const enemy of this.enemies) {
       this.renderVessel(ctx, enemy.vessel, enemy.thrust, THEME.bad);
@@ -449,8 +461,11 @@ export class FlightScene implements Scene {
     ctx.restore();
 
     // Planets with cargo bound for them are green; the rest grey. The planet the ship left gets no arrow.
+    // Planets within half the fuel range get a dot by their name.
+    const inRange = this.inHalfRange();
     PLANETS.forEach((planet, i) => {
-      if (i !== this.origin) this.renderEdgeArrow(ctx, width, height, planet, this.isBoundFor(i) ? THEME.good : THEME.muted, planet.name);
+      if (i === this.origin) return;
+      this.renderEdgeArrow(ctx, width, height, planet, this.isBoundFor(i) ? THEME.good : THEME.muted, planet.name, inRange.includes(i));
     });
     for (const enemy of this.enemies) this.renderEdgeArrow(ctx, width, height, enemy.vessel.body, THEME.bad);
     this.renderHud(ctx, width, height);
@@ -552,7 +567,8 @@ export class FlightScene implements Scene {
   }
 
   // Every planet but the one the ship left shows its dock zone: green with cargo bound there, grey without.
-  private renderPlanet(ctx: CanvasRenderingContext2D, index: number, planet: Planet): void {
+  // `inRange` puts a dot by the name (see inHalfRange).
+  private renderPlanet(ctx: CanvasRenderingContext2D, index: number, planet: Planet, inRange: boolean): void {
     if (index !== this.origin) {
       const color = this.isBoundFor(index) ? THEME.good : THEME.muted;
       ctx.save();
@@ -581,11 +597,22 @@ export class FlightScene implements Scene {
     ctx.beginPath();
     ctx.arc(planet.x, planet.y, planet.radius, 0, Math.PI * 2);
     ctx.fill();
-    drawText(ctx, planet.name, planet.x, planet.y + planet.radius + 22, { align: "center", bold: true, color: THEME.text });
+    const labelY = planet.y + planet.radius + 22;
+    drawText(ctx, planet.name, planet.x, labelY, { align: "center", bold: true, color: THEME.text });
+    if (inRange) drawRangeDot(ctx, planet.x - ctx.measureText(planet.name).width / 2 - 9, labelY);
   }
 
-  // When a point is off screen, an arrow at the edge points to it, with an optional label beside it.
-  private renderEdgeArrow(ctx: CanvasRenderingContext2D, width: number, height: number, target: Point, color: string, label?: string): void {
+  // When a point is off screen, an arrow at the edge points to it, with an optional label beside it,
+  // and a dot before the label when `inRange` (see inHalfRange).
+  private renderEdgeArrow(
+    ctx: CanvasRenderingContext2D,
+    width: number,
+    height: number,
+    target: Point,
+    color: string,
+    label?: string,
+    inRange = false,
+  ): void {
     const dx = target.x - this.camera.x;
     const dy = target.y - this.camera.y;
     const margin = 40;
@@ -608,7 +635,10 @@ export class FlightScene implements Scene {
     if (label) {
       // Pulled in towards the centre so it stays on screen.
       const inward = Math.atan2(height / 2 - y, width / 2 - x);
-      drawText(ctx, label, x + Math.cos(inward) * 34, y + Math.sin(inward) * 22, { align: "center", size: 12, bold: true, color });
+      const labelX = x + Math.cos(inward) * 34;
+      const labelY = y + Math.sin(inward) * 22;
+      drawText(ctx, label, labelX, labelY, { align: "center", size: 12, bold: true, color });
+      if (inRange) drawRangeDot(ctx, labelX - ctx.measureText(label).width / 2 - 8, labelY);
     }
   }
 
@@ -629,6 +659,7 @@ export class FlightScene implements Scene {
       color: this.bounty > 0 ? THEME.good : THEME.muted,
     });
     this.renderFuelGauge(ctx, 20, 192);
+    this.renderHalfRange(ctx, 20, 230);
 
     if (this.dangerFlash > 0) {
       drawText(ctx, `DANGER RISING: ${this.danger}`, width / 2, 70, { align: "center", size: 22, bold: true, color: THEME.bad });
@@ -660,6 +691,22 @@ export class FlightScene implements Scene {
     });
   }
 
+  // The planets marked with a dot, nearest first, with their distances.
+  private renderHalfRange(ctx: CanvasRenderingContext2D, x: number, y: number): void {
+    const inRange = this.inHalfRange();
+    if (inRange.length === 0) {
+      drawText(ctx, "No planet within half your fuel range", x, y, { size: 12, color: THEME.warn });
+      return;
+    }
+    drawRangeDot(ctx, x + 4, y);
+    drawText(ctx, "Within half your fuel range:", x + 14, y, { size: 12, color: THEME.accent });
+    inRange.forEach((i, row) => {
+      const planet = PLANETS[i];
+      const text = `${planet.name} ${Math.round(distance(this.player.body, planet))}`;
+      drawText(ctx, text, x + 14, y + 18 * (row + 1), { size: 12, color: this.isBoundFor(i) ? THEME.good : THEME.text });
+    });
+  }
+
   private renderFuelGauge(ctx: CanvasRenderingContext2D, x: number, y: number): void {
     const capacity = this.player.stats.fuelCapacity;
     const share = capacity > 0 ? this.fuel / capacity : 0;
@@ -674,5 +721,13 @@ export class FlightScene implements Scene {
 }
 
 const wrap = (value: number, size: number): number => ((value % size) + size) % size;
+
+// The marker for a planet within half the fuel range.
+function drawRangeDot(ctx: CanvasRenderingContext2D, x: number, y: number): void {
+  ctx.fillStyle = THEME.accent;
+  ctx.beginPath();
+  ctx.arc(x, y, 4, 0, Math.PI * 2);
+  ctx.fill();
+}
 
 const distance = (a: Point, b: Point): number => Math.hypot(a.x - b.x, a.y - b.y);
