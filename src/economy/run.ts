@@ -99,8 +99,13 @@ export function launch(run: Run, catalog: PartCatalog = PARTS, econ: Economy = E
 export const bountyFor = (enemy: Ship, catalog: PartCatalog = PARTS, econ: Economy = ECONOMY): number =>
   Math.round(shipValue(enemy, catalog) * econ.bountyShare);
 
-// What a flight changed, however it ended, and the danger tier it flew at.
-export type TripResult = { fuel: number; ship: Ship; bounty: number; kills: number; danger: number };
+// What a flight changed, however it ended, the danger tier it flew at, and whether it was a boss trip that destroyed the boss.
+export type TripResult = { fuel: number; ship: Ship; bounty: number; kills: number; danger: number; boss: boolean; bossKilled: boolean };
+
+// An arrived trip counts toward the next boss when it flew at top danger, unless it was a boss trip
+// and the boss survived: then the boss is still out there for the next trip.
+const countsTowardBoss = (trip: TripResult, danger: Danger): boolean =>
+  trip.danger === danger.levels.length && (!trip.boss || trip.bossKilled);
 
 // Fuel burned, damage taken (lost parts are gone), bounties earned and kills made.
 export const afterFlight = (run: Run, trip: TripResult): Run => ({
@@ -135,7 +140,7 @@ export function arrive(
   return {
     run: {
       ...run,
-      topTrips: run.topTrips + (trip.danger === danger.levels.length ? 1 : 0),
+      topTrips: run.topTrips + (countsTowardBoss(trip, danger) ? 1 : 0),
       money: run.money + earned,
       cargoEarned: run.cargoEarned + earned,
       day,

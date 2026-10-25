@@ -53,7 +53,7 @@ const planet = (x: number): Planet => ({ name: `P${x}`, x, y: 0, radius: 1, dock
 const TEST_PLANETS: readonly Planet[] = [planet(0), planet(1000), planet(3000)];
 
 // A trip at danger 1 that changed nothing: no fuel burned, no damage, no kills.
-const quietTrip = (run: Run): TripResult => ({ fuel: run.fuel, ship: run.ship, bounty: 0, kills: 0, danger: 1 });
+const quietTrip = (run: Run): TripResult => ({ fuel: run.fuel, ship: run.ship, bounty: 0, kills: 0, danger: 1, boss: false, bossKilled: false });
 
 const NO_BOSS = { every: 3, valueShare: 1, encounters: [] };
 
@@ -190,7 +190,7 @@ describe("bountyFor", () => {
 describe("afterFlight", () => {
   it("keeps the fuel left and the damage taken, pays the bounties and counts the kills", () => {
     const ship = placePart(new Map(), hex(0, 0), "bridge", 0, TEST_PARTS);
-    const run = afterFlight(testRun({ kills: 9, bountiesEarned: 9 }), { fuel: 9, ship, bounty: 99, kills: 2, danger: 1 });
+    const run = afterFlight(testRun({ kills: 9, bountiesEarned: 9 }), { fuel: 9, ship, bounty: 99, kills: 2, danger: 1, boss: false, bossKilled: false });
     expect(run.fuel).toBe(9);
     expect(run.ship).toBe(ship);
     expect(run.money).toBe(1099);
@@ -438,6 +438,20 @@ describe("arrive", () => {
     const danger = { valueCheckpoints: [100], dropBuffer: 0, killsPerTier: 9, levels: [[], []], boss: NO_BOSS };
     const run = testRun({ topTrips: 4 });
     expect(arrive(run, { ...quietTrip(run), danger: 2 }, 1, sequence(0), TEST_ECONOMY, danger).run.topTrips).toBe(5);
+  });
+
+  it("counts a boss trip that destroyed the boss", () => {
+    const danger = { valueCheckpoints: [100], dropBuffer: 0, killsPerTier: 9, levels: [[], []], boss: NO_BOSS };
+    const run = testRun({ topTrips: 2 });
+    const trip = { ...quietTrip(run), danger: 2, boss: true, bossKilled: true };
+    expect(arrive(run, trip, 1, sequence(0), TEST_ECONOMY, danger).run.topTrips).toBe(3);
+  });
+
+  it("doesn't count a boss trip the boss survived, so the next trip meets it again", () => {
+    const danger = { valueCheckpoints: [100], dropBuffer: 0, killsPerTier: 9, levels: [[], []], boss: NO_BOSS };
+    const run = testRun({ topTrips: 2 });
+    const trip = { ...quietTrip(run), danger: 2, boss: true, bossKilled: false };
+    expect(arrive(run, trip, 1, sequence(0), TEST_ECONOMY, danger).run.topTrips).toBe(2);
   });
 
   it("doesn't count a trip flown below top danger", () => {

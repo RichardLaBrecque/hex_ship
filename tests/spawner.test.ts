@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { EnemyTier } from "../src/data/enemies";
 import { shipValue } from "../src/ship/ship";
 import { validateShip } from "../src/ship/validate";
-import { buildEnemy, spawnBody } from "../src/sim/spawner";
+import { buildEnemy, respawnBody, spawnBody } from "../src/sim/spawner";
 import { TEST_PARTS } from "./catalog";
 import { seeded } from "./random";
 
@@ -50,7 +50,7 @@ describe("buildEnemy", () => {
 });
 
 describe("spawnBody", () => {
-  const ENC = { spawnDistance: 100, spawnSpread: 60, despawnDistance: 999 };
+  const ENC = { spawnDistance: 100, spawnSpread: 60, despawnDistance: 999, respawnDelay: 9, respawnDistance: 200 };
 
   it("appears ahead of the player along the route, facing the player", () => {
     // random 0.5 means no spread
@@ -63,5 +63,17 @@ describe("spawnBody", () => {
   it("strays no more than the spread off the route", () => {
     const body = spawnBody({ x: 0, y: 0, vx: 0, vy: 0, angle: 0, spin: 0 }, { x: 500, y: 0 }, () => 1, ENC);
     expect(Math.atan2(body.y, body.x)).toBeCloseTo(Math.PI / 3);
+  });
+});
+
+describe("respawnBody", () => {
+  const ENC = { spawnDistance: 100, spawnSpread: 60, despawnDistance: 999, respawnDelay: 9, respawnDistance: 200 };
+
+  it("appears respawnDistance from the player in the rolled direction, facing the player", () => {
+    // random 0.25 → a quarter turn: straight below the player
+    const body = respawnBody({ x: 10, y: 10, vx: 0, vy: 0, angle: 0, spin: 0 }, () => 0.25, ENC);
+    expect(body.x).toBeCloseTo(10);
+    expect(body.y).toBeCloseTo(210);
+    expect(body.angle).toBeCloseTo(-Math.PI / 2);
   });
 });

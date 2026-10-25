@@ -20,8 +20,9 @@ import { computeShipStats } from "../ship/stats";
 import { aiControls, type AiMode } from "../sim/ai";
 import { bounce, findContact, ramDamage } from "../sim/collision";
 import { burnFuel } from "../sim/fuel";
-import { activeThrust, speed, stepBody } from "../sim/physics";
-import { buildEnemy, spawnBody } from "../sim/spawner";
+import { activeThrust, speed, stepBody, type Body } from "../sim/physics";
+import { bossDefeated, encounterSlots, fillSlots, vacate, type Slot } from "../sim/roster";
+import { buildEnemy, respawnBody, spawnBody } from "../sim/spawner";
 import { applyHit, hexWorld, isWrecked, makeVessel, setShip, type HitKind, type Vessel } from "../sim/vessel";
 import { fireWeapons, projectileHit, stepProjectile, weaponRange, type Beam, type Projectile } from "../sim/weapons";
 
@@ -33,7 +34,7 @@ export type FlightOptions = {
   sound: Sound;
 };
 
-type Enemy = { vessel: Vessel; bounty: number; mode: AiMode; thrust: number };
+type Enemy = { vessel: Vessel; bounty: number; mode: AiMode; thrust: number; slot: number }; // slot: index into slots
 
 // A part knocked loose, drifting until it fades out.
 type Debris = { part: PlacedPart; x: number; y: number; vx: number; vy: number; angle: number; spin: number; age: number };
@@ -70,6 +71,7 @@ export class FlightScene implements Scene {
   private danger: number;
   private bossTrip: boolean; // the encounters end with a boss (see isBossTrip)
   private encounters: Encounter[]; // still to come, in route order
+  private slots: Slot[] = []; // the enemies triggered encounters keep active (see roster.ts)
   private bounty = 0;
   private kills = 0;
   private wreckTimer: number | null = null; // counts down to Game Over once the core is lost
@@ -114,7 +116,15 @@ export class FlightScene implements Scene {
   }
 
   private trip(): TripResult {
-    return { fuel: this.fuel, ship: this.player.ship, bounty: this.bounty, kills: this.kills, danger: this.danger };
+    return {
+      fuel: this.fuel,
+      ship: this.player.ship,
+      bounty: this.bounty,
+      kills: this.kills,
+      danger: this.danger,
+      boss: this.bossTrip,
+      bossKilled: bossDefeated(this.slots),
+    };
   }
 
   exit(): void {
@@ -161,11 +171,15 @@ export class FlightScene implements Scene {
     this.options.sound.setListener(player.body);
     this.options.sound.thrust(power);
 
+    // An encounter's enemies arrive ahead of the ship. Once it's triggered, each one gone is replaced from any direction.
     if (this.encounters.length > 0 && this.progress() >= this.encounters[0].at) {
-      const encounter = this.encounters.shift()!;
-      for (const level of encounter.enemies) this.spawnEnemy(ENEMY_TIERS[level - 1]);
-      if (encounter.boss) this.spawnEnemy(bossTier(shipValue(this.options.run.ship)));
+      const added = encounterSlots(this.encounters.shift()!);
+      for (const [i, slot] of added.entries()) this.spawnEnemy(slot, this.slots.length + i, spawnBody(player.body, this.ahead(), Math.random));
+      this.slots.push(...added);
     }
+    const refill = fillSlots(this.slots, dt);
+    this.slots = refill.slots;
+    for (const i of refill.due) this.spawnEnemy(this.slots[i], i, respawnBody(player.body, Math.random));
 
     this.stepWorld(dt);
     if (isWrecked(player)) {
@@ -185,12 +199,22 @@ export class FlightScene implements Scene {
     if (dock !== null && speed(player.body) < FLIGHT.dockSpeed) this.options.onArrive(this.trip(), dock);
   }
 
-  private spawnEnemy(tier: EnemyTier): void {
+  // A fresh enemy for slots[index], at `body`.
+  private spawnEnemy(slot: Slot, index: number, body: Body): void {
+    const tier: EnemyTier = slot.level === "boss" ? bossTier(shipValue(this.options.run.ship)) : ENEMY_TIERS[slot.level - 1];
     const ship = buildEnemy(tier, Math.random);
-    const body = spawnBody(this.player.body, this.ahead(), Math.random);
     const crew = computeShipStats(ship, 0).crewRequired; // enemies are always fully crewed
     const vessel = { ...makeVessel("enemy", ship, body, crew), aimError: tier.aimError };
-    this.enemies.push({ vessel, bounty: bountyFor(ship), mode: "chase", thrust: 0 });
+    this.enemies.push({ vessel, bounty: bountyFor(ship), mode: "chase", thrust: 0, slot: index });
+  }
+
+  // The enemy is out of the fight, so its slot starts counting down to a replacement.
+  private vacate(enemy: Enemy, destroyed: boolean): void {
+    this.slots[enemy.slot] = vacate(this.slots[enemy.slot], destroyed);
+  }
+
+  private isBoss(enemy: Enemy): boolean {
+    return this.slots[enemy.slot].level === "boss";
   }
 
   // Everything except the player's own controls: enemies, weapons, projectiles, upkeep and debris.
@@ -208,9 +232,12 @@ export class FlightScene implements Scene {
     }
     const enemies = this.enemies.map((e) => e.vessel);
     this.collide(alive ? [player, ...enemies] : enemies);
-    this.enemies = this.enemies.filter(
-      (e) => e.mode !== "flee" || distance(e.vessel.body, player.body) < ENCOUNTERS.despawnDistance,
+    // A fleeing enemy far enough away has escaped. The boss never escapes.
+    const escaped = this.enemies.filter(
+      (e) => e.mode === "flee" && !this.isBoss(e) && distance(e.vessel.body, player.body) >= ENCOUNTERS.despawnDistance,
     );
+    for (const enemy of escaped) this.vacate(enemy, false);
+    this.enemies = this.enemies.filter((e) => !escaped.includes(e));
 
     for (const v of [player, ...this.enemies.map((e) => e.vessel)]) this.upkeep(v, dt);
 
@@ -252,6 +279,7 @@ export class FlightScene implements Scene {
       if (!isWrecked(enemy.vessel)) continue;
       this.bounty += enemy.bounty;
       this.kills += 1;
+      this.vacate(enemy, true);
       this.explode(enemy.vessel);
       const nearby = Math.max(0, 1 - distance(enemy.vessel.body, player.body) / TRAUMA_KILL_RANGE);
       this.trauma = addTrauma(this.trauma, TRAUMA_KILL * nearby);

@@ -53,6 +53,14 @@ function openHexes(ship: Ship): Hex[] {
   return [...open.values()];
 }
 
+// A replacement for an enemy that's gone: `respawnDistance` from the player in any direction, facing the player.
+export function respawnBody(player: Body, random: Random, enc: Encounters = ENCOUNTERS): Body {
+  const angle = random() * 2 * Math.PI;
+  const x = player.x + Math.cos(angle) * enc.respawnDistance;
+  const y = player.y + Math.sin(angle) * enc.respawnDistance;
+  return { x, y, vx: 0, vy: 0, angle: Math.atan2(player.y - y, player.x - x), spin: 0 };
+}
+
 // Somewhere ahead of the player toward `toward`, a little off the route, facing the player.
 export function spawnBody(player: Body, toward: Point, random: Random, enc: Encounters = ENCOUNTERS): Body {
   const route = Math.atan2(toward.y - player.y, toward.x - player.x);
