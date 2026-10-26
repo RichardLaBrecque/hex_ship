@@ -99,9 +99,9 @@ export const TUTORIAL: { legs: readonly TutorialLeg[]; finale: { title: string; 
   finale: {
     title: "A ship of your own",
     paragraphs: [
-      "The Wasp is home, and the yard keeps its word: a starter ship, a little cash and a contract board are waiting at Avalon.",
-      "From here on it's your call. Fit out the ship, hire crew and haul cargo between any planets. Danger rises with your ship's value and your kills.",
-      "There are two ways to make your name: destroy the Flagship, or deliver the Grand Haul across the system.",
+      "Avalon Shipyards honour the deal: a ship of your very own. It isn't much, but with a little grit, the stars are yours.",
+      "Raiders have grown bolder these last few years, preying on the weak. Will you rise to meet them, and bring down the bandit king's Flagship?",
+      "Or will you be the first merchant to complete the fabled Grand Haul? It's a contract so rich that only the very best captains are ever offered it.",
     ],
   },
 };

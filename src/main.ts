@@ -136,7 +136,7 @@ function flyLeg(index: number, run: Run): void {
 
 function showFinale(): void {
   const { title, paragraphs } = TUTORIAL.finale;
-  scenes.switchTo(new BriefingScene({ kicker: "TUTORIAL COMPLETE", title, paragraphs, action: "Begin", onContinue: finishTutorial }));
+  scenes.switchTo(new BriefingScene({ kicker: "TUTORIAL COMPLETE", title, paragraphs, action: "Take the helm", onContinue: finishTutorial }));
 }
 
 // Finished or skipped: on to the game proper, or back to the run already under way when the tutorial was replayed.
