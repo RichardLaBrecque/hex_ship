@@ -74,9 +74,9 @@ describe("computeShipStats", () => {
     expect(computeShipStats(ship, 2, TEST_PARTS).thrust).toBe(0);
   });
 
-  it("pushes from where each engine sits, twisting the ship about its centre of mass", () => {
-    // engine at (0,-1) is at pixel (-8.66, -15); bridge and engine weigh 10 each, so the centre is halfway
-    // and the engine's arm is (-4.33, -7.5). Pushing +x with 40 from above the centre turns the ship clockwise: 7.5 × 40.
+  it("pushes from where each engine sits, twisting the ship about its center of mass", () => {
+    // engine at (0,-1) is at pixel (-8.66, -15); bridge and engine weigh 10 each, so the center is halfway
+    // and the engine's arm is (-4.33, -7.5). Pushing +x with 40 from above the center turns the ship clockwise: 7.5 × 40.
     const ship = build([0, 0, "bridge", 0], [0, -1, "engine", 3]);
     const { main } = computeShipStats(ship, 2, TEST_PARTS, TUNING);
     expect(main.force.x).toBeCloseTo(40);
@@ -84,7 +84,7 @@ describe("computeShipStats", () => {
     expect(main.torque).toBeCloseTo(300);
   });
 
-  it("doesn't twist a ship whose engine pushes through its centre of mass", () => {
+  it("doesn't twist a ship whose engine pushes through its center of mass", () => {
     const ship = build([0, 0, "bridge", 0], [-1, 0, "engine", 3]);
     expect(computeShipStats(ship, 2, TEST_PARTS, TUNING).main.torque).toBeCloseTo(0);
   });

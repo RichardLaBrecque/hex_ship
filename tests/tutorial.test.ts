@@ -37,7 +37,7 @@ function tankDistance(run: ReturnType<typeof tutorialRun>): number {
 }
 
 describe("TUTORIAL", () => {
-  it("hauls from Avalon to its nearest neighbour and flies back", () => {
+  it("hauls from Avalon to its nearest neighbor and flies back", () => {
     expect(PLANETS[HAUL.from].name).toBe("Avalon");
     expect(HAUL.flight.to).toBe(nearestTo(HAUL.from));
     expect(HOME.from).toBe(HAUL.flight.to);
@@ -71,7 +71,7 @@ describe("TUTORIAL", () => {
 });
 
 describe("tutorialRun", () => {
-  it("docks the leg's ship where the leg starts, fully crewed and fuelled", () => {
+  it("docks the leg's ship where the leg starts, fully crewed and fueled", () => {
     const run = tutorialRun(HAUL);
     const stats = computeShipStats(run.ship, Infinity);
     expect(run.docked).toBe(HAUL.from);

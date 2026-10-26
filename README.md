@@ -7,14 +7,14 @@ planets, and fight off raiders on the way. Each run is roguelike: lose your ship
 
 > **This is a vibe-coding practice project.** I built it by pairing with an AI coding agent (Claude Code), one
 > playable milestone at a time. I set the design, the rules and the feel, and played each build. The agent wrote
-> most of the code. The point is to practise that way of working, so expect placeholder balance numbers and
+> most of the code. The point is to practice that way of working, so expect placeholder balance numbers and
 > some rough edges.
 
 ## How to play
 
 1. **Build your ship at the station.** Buy hex parts and place them on the grid: bridge, engines, fuel tanks, crew
    modules, cargo bays, armor, shields, and laser, cannon or missile pods. A ship has to be spaceworthy before it
-   can launch, and where you put the engines matters. Engines that sit off-centre twist the ship, and the
+   can launch, and where you put the engines matters. Engines that sit off-center twist the ship, and the
    shipyard shows how far.
 2. **Take a contract.** Load cargo, hire crew and buy fuel. Heavier ships burn more fuel.
 3. **Fly it to the other planet.** Your weapons fire on their own. Your job is to fly.
@@ -50,7 +50,7 @@ flight, the buttons in the bottom corners turn, thrust and brake, and you can ho
 - TypeScript with no game framework. It draws vector art on an HTML Canvas.
 - [Vite](https://vite.dev/) for the dev server and build.
 - [Vitest](https://vitest.dev/) for tests.
-- The Web Audio API for synthesised sound effects. There are no audio files.
+- The Web Audio API for synthesized sound effects. There are no audio files.
 - GitHub Pages for hosting. Every push to `main` redeploys through
   [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml).
 
@@ -72,8 +72,8 @@ npm run preview    # serve the built game
 
 ```
 src/
-  audio/    synthesised sound effects
-  data/     part catalogue, enemy designs and balance numbers
+  audio/    synthesized sound effects
+  data/     part catalog, enemy designs and balance numbers
   economy/  contracts, crew, fuel, shop, danger tiers and run state
   engine/   game loop, input and scenes
   fx/       particles and screen shake

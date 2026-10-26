@@ -92,7 +92,7 @@ export function hexRound(q: number, r: number): Hex {
   return hex(rq + 0, rr + 0); // + 0 turns -0 into 0
 }
 
-// Corner points of a hex centred at `center`, starting at the top and going clockwise.
+// Corner points of a hex centered at `center`, starting at the top and going clockwise.
 export function hexCorners(center: Point, size: number): Point[] {
   const corners: Point[] = [];
   for (let i = 0; i < 6; i++) {

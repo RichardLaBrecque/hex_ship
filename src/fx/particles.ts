@@ -15,7 +15,7 @@ export type Particle = {
 export const MAX_PARTICLES = 1500; // the oldest are dropped past this, so a big fight can't slow the game down
 const DRAG = 2.5; // per second; particles slow down as they fade
 
-// Moves every particle one step and drops the ones that have burnt out.
+// Moves every particle one step and drops the ones that have burned out.
 export function stepParticles(particles: readonly Particle[], dt: number): Particle[] {
   const slow = Math.exp(-DRAG * dt);
   const alive: Particle[] = [];

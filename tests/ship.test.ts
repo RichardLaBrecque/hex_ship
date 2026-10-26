@@ -14,7 +14,7 @@ describe("rotatePart", () => {
     expect(partAt(ship, hex(-1, 0))!.rotation).toBe(0);
   });
 
-  it("turns anticlockwise with negative steps", () => {
+  it("turns counterclockwise with negative steps", () => {
     const ship = rotatePart(damagedEngine(), hex(-1, 0), -1);
     expect(partAt(ship, hex(-1, 0))!.rotation).toBe(2);
   });

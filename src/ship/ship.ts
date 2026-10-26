@@ -61,7 +61,7 @@ export function engineFlame(ship: Ship, part: PlacedPart, thrust: number): numbe
   return isMainEngine(part) ? Math.max(0, thrust) : Math.max(0, -thrust);
 }
 
-// Mass-weighted centre in ship-local pixels for a given hex size. The ship turns around this point.
+// Mass-weighted center in ship-local pixels for a given hex size. The ship turns around this point.
 export function centerOfMass(ship: Ship, size: number, catalog: PartCatalog = PARTS): Point {
   let total = 0;
   let x = 0;

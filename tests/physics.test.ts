@@ -114,7 +114,7 @@ describe("thrustSpin", () => {
     expect(thrustSpin(SHIP, twisted(2500).main, TUNING)).toBeCloseTo(run(AT_REST, 1, 0, 600, twisted(2500)).spin, 1);
   });
 
-  it("is 0 for engines that push through the centre of mass", () => {
+  it("is 0 for engines that push through the center of mass", () => {
     expect(thrustSpin(SHIP, SHIP.main, TUNING)).toBe(0);
   });
 

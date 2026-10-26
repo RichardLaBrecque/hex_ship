@@ -10,7 +10,7 @@ import { aimPoint, bearingTo, fireWeapons, projectileHit, stepProjectile, weapon
 import { TEST_PARTS } from "./catalog";
 
 const SIZE = 10;
-const HEX_WIDTH = SIZE * Math.sqrt(3); // pixels between neighbouring hex centres in a row
+const HEX_WIDTH = SIZE * Math.sqrt(3); // pixels between neighboring hex centers in a row
 
 const build = (...parts: [number, number, Parameters<typeof placePart>[2], number][]): Ship =>
   parts.reduce<Ship>((ship, [q, r, type, rotation]) => placePart(ship, hex(q, r), type, rotation, TEST_PARTS), new Map());
@@ -19,7 +19,7 @@ const at = (x: number, y: number, angle = 0): Body => ({ x, y, vx: 0, vy: 0, ang
 
 const vessel = (side: Side, ship: Ship, body: Body, crew = 9): Vessel => makeVessel(side, ship, body, crew, SIZE, TEST_PARTS);
 
-// One bridge hex: its pivot is its own centre, so world position = body position.
+// One bridge hex: its pivot is its own center, so world position = body position.
 const dot = (side: Side, x: number, y: number): Vessel => vessel(side, build([0, 0, "bridge", 0]), at(x, y));
 
 describe("toWorld / toLocal", () => {

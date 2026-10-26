@@ -10,7 +10,7 @@ export type Validation = {
   blockedEngines: Set<string>; // hexKeys of engines whose exhaust hex is occupied
 };
 
-// hexKeys of every part reachable from the bridge through neighbouring hexes.
+// hexKeys of every part reachable from the bridge through neighboring hexes.
 export function connectedToBridge(ship: Ship): Set<string> {
   const bridges = findBridges(ship);
   const reached = new Set<string>();

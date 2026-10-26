@@ -30,7 +30,7 @@ describe("stepParticles", () => {
     expect(moved.vx).toBeGreaterThan(0);
   });
 
-  it("drops particles that have burnt out", () => {
+  it("drops particles that have burned out", () => {
     expect(stepParticles([particle({ age: 0.95 })], 0.1)).toEqual([]);
   });
 

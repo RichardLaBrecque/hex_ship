@@ -219,7 +219,7 @@ export class StationScene implements Scene {
     this.tab = "parts";
   }
 
-  // Turns the tool's next part, or the selected part, one step clockwise (step 1) or anticlockwise (step -1).
+  // Turns the tool's next part, or the selected part, one step clockwise (step 1) or counterclockwise (step -1).
   private rotate(step: number): void {
     const type = this.building();
     if (type) {
@@ -1245,7 +1245,7 @@ function partDetails(id: PartId): string[] {
 
 const fmt = (n: number, digits = 0): string => n.toFixed(digits);
 
-// How off-centre engines turn the ship under full thrust or braking, if nobody steers (see thrustSpin).
+// How off-center engines turn the ship under full thrust or braking, if nobody steers (see thrustSpin).
 const STRAIGHT = (1 * Math.PI) / 180; // a drift under 1°/s isn't worth mentioning
 
 function driftText(spin: number): string {

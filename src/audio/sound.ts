@@ -1,7 +1,7 @@
 import type { Point } from "../hex/hex";
 import { browserStore, type Store } from "../save/store";
 
-// Sound effects synthesised with WebAudio, so there are no audio files to load or host.
+// Sound effects synthesized with WebAudio, so there are no audio files to load or host.
 // Browsers only allow audio after the player presses a key or clicks; until then every sound is silent.
 export const MUTE_KEY = "hex-ship/muted";
 

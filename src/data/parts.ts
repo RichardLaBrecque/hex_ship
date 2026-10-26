@@ -79,7 +79,7 @@ export const PARTS: PartCatalog = {
     ...BLANK,
     id: "engine",
     name: "Engine",
-    description: "Thrust and turning. Burns fuel while thrusting. Needs an empty hex behind its exhaust. Pushes from where it sits, so an off-centre engine twists the ship. Facing forward, it fires when braking.",
+    description: "Thrust and turning. Burns fuel while thrusting. Needs an empty hex behind its exhaust. Pushes from where it sits, so an off-center engine twists the ship. Facing forward, it fires when braking.",
     color: "#d9622b",
     cost: 120,
     mass: 6,

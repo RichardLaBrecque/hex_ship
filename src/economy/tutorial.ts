@@ -5,7 +5,7 @@ import { placePart, type Ship } from "../ship/ship";
 import { computeShipStats } from "../ship/stats";
 import { newRun, type Run } from "./run";
 
-// A run for flying one leg of the tutorial: its demo ship fully crewed and fuelled, docked where the leg starts,
+// A run for flying one leg of the tutorial: its demo ship fully crewed and fueled, docked where the leg starts,
 // with its cargo aboard. It's never saved or scored.
 export function tutorialRun(leg: TutorialLeg, catalog: PartCatalog = PARTS): Run {
   let ship: Ship = new Map();

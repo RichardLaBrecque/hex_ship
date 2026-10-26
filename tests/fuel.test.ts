@@ -134,13 +134,13 @@ describe("fitFuel", () => {
     expect(run.money).toBe(1070);
   });
 
-  it("rounds a part unit of fuel up, as refuelling does", () => {
+  it("rounds a part unit of fuel up, as refueling does", () => {
     // 20.5 units at $3 = $61.50 → $62
     const run = fitFuel(testRun({ fuel: 50.5, ship: new Map([...testShip()].filter(([k]) => k !== "0,1")) }), TEST_PARTS, TEST_ECONOMY);
     expect(run.money).toBe(1062);
   });
 
-  it("makes moving a tank free: selling it, buying it elsewhere and refuelling costs what refuelling alone does", () => {
+  it("makes moving a tank free: selling it, buying it elsewhere and refueling costs what refueling alone does", () => {
     const sold = ok(sellPart(testRun(), hex(0, 1), TEST_PARTS, TEST_ECONOMY));
     const moved = ok(refuel(ok(buyPart(sold, hex(1, 0), "fuel", 0, TEST_PARTS, TEST_ECONOMY)), TEST_PARTS, TEST_ECONOMY));
     const stayed = ok(refuel(testRun(), TEST_PARTS, TEST_ECONOMY));

@@ -4,7 +4,7 @@ import type { ShipStats, Thrust } from "../ship/stats";
 // spin: radians per second, positive clockwise (right).
 export type Body = { x: number; y: number; vx: number; vy: number; angle: number; spin: number };
 
-// thrust: 1 full forward, -1 full brake. turn: -1 left (anticlockwise), 1 right.
+// thrust: 1 full forward, -1 full brake. turn: -1 left (counterclockwise), 1 right.
 export type Controls = { thrust: number; turn: number };
 
 export type FlightTuning = typeof FLIGHT;
@@ -21,7 +21,7 @@ export function activeThrust(ship: Pick<ShipStats, "main" | "brake">, thrust: nu
   return { mode: NO_THRUST, power: 0 };
 }
 
-// Engines push the ship from where they sit, so an off-centre engine twists it as well as pushing it.
+// Engines push the ship from where they sit, so an off-center engine twists it as well as pushing it.
 // The gyro (turnRate) pushes the spin toward the turn the pilot asks for, harder the further off it is,
 // up to its strength. Against a steady engine twist it settles at a steady drift-turn (see thrustSpin),
 // which the pilot can cancel by steering the other way.

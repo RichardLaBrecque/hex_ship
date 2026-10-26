@@ -6,7 +6,7 @@ export const FLIGHT = {
   reverseFactor: 0.25, // braking runs the main engines in reverse at this share; retro engines add full power on top
   turnScale: 1.2, // ship turn-rate stat → radians/s
   gyroResponse: 4, // per second: how hard the gyro corrects spin; higher snaps to the asked-for turn faster and resists engine twist more
-  torqueScale: 1, // how strongly off-centre engines twist the ship; 0 turns the effect off
+  torqueScale: 1, // how strongly off-center engines twist the ship; 0 turns the effect off
   spinDrag: 1, // per second; slows spin on its own, so a ship that overpowers its gyro spins steadily instead of ever faster
   drag: 0.14, // per second; lower is slidier. A coasting ship halves its speed every ln 2 / drag ≈ 5 s. Top speed ≈ acceleration × thrustScale / drag
   dockSpeed: 80, // must be slower than this (pixels/s) to dock
@@ -38,7 +38,7 @@ export type Combat = typeof COMBAT;
 
 export type Planet = { name: string; x: number; y: number; radius: number; dockRadius: number; color: string };
 
-// Every planet's nearest neighbour is close enough for the starter ship to reach and come back (tests/balance.test.ts).
+// Every planet's nearest neighbor is close enough for the starter ship to reach and come back (tests/balance.test.ts).
 export const PLANETS: readonly Planet[] = [
   { name: "Avalon", x: 0, y: 0, radius: 160, dockRadius: 320, color: "#3f8fd0" },
   { name: "Brask", x: 7600, y: -2800, radius: 130, dockRadius: 290, color: "#c8743a" },
@@ -56,14 +56,14 @@ export const ECONOMY = {
   bridgeRepairPerHp: 2, // the bridge has no price, so it's repaired at a flat rate
   crewHireCost: 40, // one-off signing fee per crew member
   crewWage: 15, // per crew member, paid at every launch
-  fuelPrice: 2, // per fuel unit when refuelling at a station
+  fuelPrice: 2, // per fuel unit when refueling at a station
   towFee: 150, // charged for a tow back when you run dry mid-flight
   offersPerStation: 4,
   openShare: 0.25, // chance an offer is an open contract: delivered to any other planet, at a low fixed rate
   openPayShare: 0.5, // an open contract pays this share of its tier's pay, however far it goes
   dumpPenaltyShare: 0.1, // dumping a contract short of its destination costs this share of its pay
   dumpReputationLoss: 3, // ...and takes this many deliveries off your reputation
-  payDistance: 8000, // pixels, about one hop to a nearest neighbour; a contract this far pays its tier's pay, and farther pays more in proportion
+  payDistance: 8000, // pixels, about one hop to a nearest neighbor; a contract this far pays its tier's pay, and farther pays more in proportion
   payBonusPerDelivery: 0.03, // reputation: every contract delivered adds 3% to contract pay
   topTierShare: 0.5, // chance an offer comes from your best unlocked contract tier rather than any unlocked tier
   // Delivering contracts earns reputation ranks, and each rank unlocks a contract tier.

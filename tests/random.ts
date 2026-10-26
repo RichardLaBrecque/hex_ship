@@ -1,4 +1,4 @@
-// A repeatable random source (mulberry32) so randomised builders can be tested.
+// A repeatable random source (mulberry32) so randomized builders can be tested.
 export function seeded(seed: number): () => number {
   let a = seed;
   return () => {

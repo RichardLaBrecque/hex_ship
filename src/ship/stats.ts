@@ -7,7 +7,7 @@ import { centerOfMass, isExhaustBlocked, isMainEngine, type Ship } from "./ship"
 // What the engines do together in one mode (thrusting or braking), at full power.
 export type Thrust = {
   force: Point; // ship-local, in thrust units; +x is forward
-  torque: number; // twist about the centre of mass, thrust units × pixels; positive turns clockwise (right)
+  torque: number; // twist about the center of mass, thrust units × pixels; positive turns clockwise (right)
   fuelBurn: number; // fuel units per second
 };
 
@@ -18,7 +18,7 @@ export type ShipStats = {
   turnRate: number; // the gyro: how fast the ship can turn, and how hard it fights unwanted spin
   main: Thrust; // W: the main engines
   brake: Thrust; // S: retro engines at full power, plus the main engines reversed at reverseFactor
-  inertia: number; // resistance to spinning: mass × pixels² about the centre of mass
+  inertia: number; // resistance to spinning: mass × pixels² about the center of mass
   hull: number;
   maxHull: number;
   shieldMax: number;

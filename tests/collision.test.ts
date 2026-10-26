@@ -8,7 +8,7 @@ import { makeVessel, type Vessel } from "../src/sim/vessel";
 import { TEST_PARTS } from "./catalog";
 
 const SIZE = 10;
-const HEX_WIDTH = SIZE * Math.sqrt(3); // pixels between neighbouring hex centres in a row
+const HEX_WIDTH = SIZE * Math.sqrt(3); // pixels between neighboring hex centers in a row
 
 const build = (...parts: [number, number, Parameters<typeof placePart>[2], number][]): Ship =>
   parts.reduce<Ship>((ship, [q, r, type, rotation]) => placePart(ship, hex(q, r), type, rotation, TEST_PARTS), new Map());
@@ -17,11 +17,11 @@ const moving = (x: number, y: number, vx = 0, vy = 0): Body => ({ x, y, vx, vy, 
 
 const vessel = (ship: Ship, body: Body): Vessel => makeVessel("enemy", ship, body, 9, SIZE, TEST_PARTS);
 
-// One bridge hex of mass 10: its pivot is its own centre, so world position = body position.
+// One bridge hex of mass 10: its pivot is its own center, so world position = body position.
 const dot = (body: Body): Vessel => vessel(build([0, 0, "bridge", 0]), body);
 
 describe("findContact", () => {
-  it("finds two parts closer than neighbouring hexes", () => {
+  it("finds two parts closer than neighboring hexes", () => {
     const contact = findContact(dot(moving(0, 0)), dot(moving(10, 0)), SIZE)!;
     expect(contact.aKey).toBe("0,0");
     expect(contact.bKey).toBe("0,0");

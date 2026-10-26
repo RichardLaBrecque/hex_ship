@@ -83,7 +83,7 @@ export const BOSS: EnemyTier = {
 // One encounter: when it triggers, and the tier (1-based) of each enemy it keeps active, plus the boss if `boss`.
 // An enemy destroyed or escaped is replaced after ENCOUNTERS.respawnDelay, so the counts are enemies active at once.
 // The boss is never replaced once destroyed, and never escapes.
-// `at` is how far out the ship is, as a share of the distance from the planet it left to that planet's nearest neighbour.
+// `at` is how far out the ship is, as a share of the distance from the planet it left to that planet's nearest neighbor.
 export type Encounter = { at: number; enemies: readonly number[]; boss?: boolean };
 
 // Danger tier = the higher of a ship-value tier and a notoriety (kills) tier.

@@ -68,7 +68,7 @@ const HOLD_FULL_SECONDS = 1; // how long "HOLD FULL" shows after touching salvag
 export class FlightScene implements Scene {
   private origin: number; // index into PLANETS of the planet the ship left
   private from: Planet;
-  private hop: number; // distance from the origin to its nearest neighbour; encounters trigger along it
+  private hop: number; // distance from the origin to its nearest neighbor; encounters trigger along it
   private player: Vessel;
   private enemies: Enemy[] = [];
   private projectiles: Projectile[] = [];
@@ -477,7 +477,7 @@ export class FlightScene implements Scene {
     }
   }
 
-  // How far out the ship is, as a share of the hop to the origin's nearest neighbour (see Encounter).
+  // How far out the ship is, as a share of the hop to the origin's nearest neighbor (see Encounter).
   private progress(): number {
     return Math.min(1, distance(this.player.body, this.from) / this.hop);
   }
@@ -549,7 +549,7 @@ export class FlightScene implements Scene {
     drawParticles(ctx, this.particles);
     ctx.restore();
 
-    // Planets with cargo bound for them are green; the rest grey. The planet the ship left gets no arrow.
+    // Planets with cargo bound for them are green; the rest gray. The planet the ship left gets no arrow.
     // Each label gives the planet's distance, and planets within half the fuel range get a dot by it.
     const inRange = this.inHalfRange();
     PLANETS.forEach((planet, i) => {
@@ -696,7 +696,7 @@ export class FlightScene implements Scene {
     });
   }
 
-  // Every planet but the one the ship left shows its dock zone: green with cargo bound there, grey without.
+  // Every planet but the one the ship left shows its dock zone: green with cargo bound there, gray without.
   // `inRange` puts a dot by the name (see inHalfRange).
   private renderPlanet(ctx: CanvasRenderingContext2D, index: number, planet: Planet, inRange: boolean): void {
     if (index !== this.origin) {

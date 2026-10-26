@@ -6,12 +6,12 @@ import { hexWorld, type Vessel } from "./vessel";
 export type Contact = {
   aKey: string;
   bKey: string;
-  point: Point; // halfway between the two parts' centres
+  point: Point; // halfway between the two parts' centers
   normal: Point; // unit vector from a's part toward b's
   depth: number; // pixels the parts overlap
 };
 
-// Parts count as touching once their centres are closer than neighbouring hexes on one ship (√3 sizes).
+// Parts count as touching once their centers are closer than neighboring hexes on one ship (√3 sizes).
 export function findContact(a: Vessel, b: Vessel, size: number = FLIGHT.hexSize): Contact | null {
   if (a.ship.size === 0 || b.ship.size === 0) return null;
   if (Math.hypot(b.body.x - a.body.x, b.body.y - a.body.y) > a.radius + b.radius) return null;

@@ -62,7 +62,7 @@ export function newRun(random: Random = Math.random, econ: Economy = ECONOMY): R
   };
 }
 
-// Wages and new crew's signing fees are paid at launch. Fuel is bought separately when refuelling.
+// Wages and new crew's signing fees are paid at launch. Fuel is bought separately when refueling.
 export const launchCost = (run: Run, econ: Economy = ECONOMY): number => wages(run.crew, econ) + hiringFees(run, econ);
 
 // What the cargo aboard pays when the ship docks at `planet`.

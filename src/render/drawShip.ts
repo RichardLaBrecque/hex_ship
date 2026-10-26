@@ -9,11 +9,11 @@ export type ShipDrawOptions = {
   origin: Point; // screen position of the ship's (0,0) hex
   size: number; // hex size in pixels
   angle?: number; // ship rotation in radians
-  pivot?: Point; // ship-local point placed at `origin` and rotated around (e.g. centre of mass)
+  pivot?: Point; // ship-local point placed at `origin` and rotated around (e.g. center of mass)
   thrust?: number; // the thrust control, -1..1: main engines flame on thrust, retro engines on brake
   alpha?: number;
   flagged?: ReadonlySet<string>; // hexKeys drawn with a red warning outline
-  outline?: string; // hex border colour for every part, e.g. to mark enemies
+  outline?: string; // hex border color for every part, e.g. to mark enemies
   catalog?: PartCatalog;
 };
 

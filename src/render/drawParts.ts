@@ -1,7 +1,7 @@
 import type { PartDef } from "../data/parts";
 import { directionAngle } from "../hex/hex";
 
-// Draws a part's icon centred on the origin. The caller has already translated/rotated to the hex.
+// Draws a part's icon centered on the origin. The caller has already translated/rotated to the hex.
 export function drawPartIcon(ctx: CanvasRenderingContext2D, def: PartDef, rotation: number, s: number): void {
   ctx.save();
   ctx.fillStyle = def.color;

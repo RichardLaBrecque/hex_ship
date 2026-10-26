@@ -15,7 +15,7 @@ export type Vessel = {
   ship: Ship;
   body: Body; // x/y is where the ship's pivot sits in the world
   stats: ShipStats;
-  pivot: Point; // ship-local centre of mass
+  pivot: Point; // ship-local center of mass
   radius: number; // ship-local distance from the pivot to the farthest hex edge
   crew: number;
   shields: Shields; // charge held by each shield generator
@@ -102,7 +102,7 @@ export function applyHit(
   return { throughShield: leftover, destroyed: result.destroyed, detached: result.detached };
 }
 
-// Swaps in a changed layout. The ship stays where it was on screen even though its centre of mass moved.
+// Swaps in a changed layout. The ship stays where it was on screen even though its center of mass moved.
 export function setShip(v: Vessel, ship: Ship, size: number = FLIGHT.hexSize, catalog: PartCatalog = PARTS): void {
   const pivot = centerOfMass(ship, size, catalog);
   const anchor = toWorld(v, pivot);

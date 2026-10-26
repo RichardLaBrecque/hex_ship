@@ -76,7 +76,7 @@ describe("hexToPixel / pixelToHex", () => {
     expect(hexToPixel(hex(1, 0), 10).y).toBe(0);
   });
 
-  it("maps points near a centre back to that hex", () => {
+  it("maps points near a center back to that hex", () => {
     expect(pixelToHex({ x: 3, y: -4 }, 24)).toEqual(hex(0, 0));
   });
 });

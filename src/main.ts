@@ -144,7 +144,7 @@ function finishTutorial(): void {
   markTutorialDone();
   const saved = loadRun();
   if (saved) openStation(saved, `Back to your run. Day ${saved.day}, $${saved.money}.`);
-  else openStation(newRun(), "Welcome to Avalon, Captain. Your starter ship is fuelled: take a contract and launch.");
+  else openStation(newRun(), "Welcome to Avalon, Captain. Your starter ship is fueled: take a contract and launch.");
 }
 
 // The core is lost or the player ended the run: the save goes and the score joins the records.

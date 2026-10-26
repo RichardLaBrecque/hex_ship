@@ -21,7 +21,7 @@ export type TutorialLeg = {
 };
 
 const AVALON = 0;
-const ERIS = 4; // Avalon's nearest neighbour, and Avalon is Eris's (tests/tutorial.test.ts)
+const ERIS = 4; // Avalon's nearest neighbor, and Avalon is Eris's (tests/tutorial.test.ts)
 
 // A real Raider's core with no extras and shakier aim, so a first fight is one a new pilot can win.
 const TRAINING_RAIDER: EnemyTier = {
@@ -53,7 +53,7 @@ export const TUTORIAL: { legs: readonly TutorialLeg[]; finale: { title: string; 
       from: AVALON,
       cargo: { name: "Medical supplies", units: 20 },
       briefing: [
-        "You're the newest captain in the system: licence still warm, and no ship to your name.",
+        "You're the newest captain in the system: license still warm, and no ship to your name.",
         "The Avalon yard will lend you the Mule for one run. It's a demo hauler with no guns. The lane to Eris is quiet, so you won't need any.",
         "Take 20 units of medical supplies to Eris. Learn how the Mule handles: it drifts, so brake early and come into the dock ring slowly.",
       ],
@@ -99,7 +99,7 @@ export const TUTORIAL: { legs: readonly TutorialLeg[]; finale: { title: string; 
   finale: {
     title: "A ship of your own",
     paragraphs: [
-      "Avalon Shipyards honour the deal: a ship of your very own. It isn't much, but with a little grit, the stars are yours.",
+      "Avalon Shipyards honor the deal: a ship of your very own. It isn't much, but with a little grit, the stars are yours.",
       "Raiders have grown bolder these last few years, preying on the weak. Will you rise to meet them, and bring down the bandit king's Flagship?",
       "Or will you be the first merchant to complete the fabled Grand Haul? It's a contract so rich that only the very best captains are ever offered it.",
     ],
