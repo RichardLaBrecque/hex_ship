@@ -5,7 +5,7 @@ import { dangerTier, isBossTrip } from "../economy/danger";
 import { PARTS } from "../data/parts";
 import { deliverableAt, holdUsed, planetDistance } from "../economy/contracts";
 import { pickSalvage, salvageUnits, type Salvage } from "../economy/salvage";
-import { bountyFor, type TripResult, type Run } from "../economy/run";
+import { bountyFor, winsAsWarrior, type TripResult, type Run } from "../economy/run";
 import type { Input } from "../engine/input";
 import type { Scene } from "../engine/scene";
 import { BURSTS, burst, drawParticles, emitCount, exhaust, stepParticles, type Particle } from "../fx/particles";
@@ -216,7 +216,7 @@ export class FlightScene implements Scene {
 
     this.stepWorld(dt);
     // Only the first win gets a victory screen. A run already won just fights on.
-    if (!this.celebrated && this.options.run.won === null && bossDefeated(this.slots)) {
+    if (!this.celebrated && winsAsWarrior(this.options.run, this.trip())) {
       this.victoryTimer = COMBAT.wreckDelay;
       return;
     }

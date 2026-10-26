@@ -8,7 +8,7 @@ import { contractPay, deliverableAt, generateOffers, holdUsed, type Contract } f
 import { valueTier } from "./danger";
 import { hiringFees, wages } from "./crew";
 import type { Salvage } from "./salvage";
-import { deliveredGrandHaul, type Won } from "./victory";
+import { carriesGrandHaul, deliveredGrandHaul, type Won } from "./victory";
 
 // Everything about the current run. Actions return a new Run instead of changing this one.
 export type Run = {
@@ -125,9 +125,11 @@ export type TripResult = {
 const countsTowardBoss = (trip: TripResult, danger: Danger): boolean =>
   trip.danger === danger.levels.length && (!trip.boss || trip.bossKilled);
 
-// A trip that destroyed the boss wins the run as the Warrior, if it wasn't already won.
-export const withBossWin = (run: Run, trip: TripResult): Run =>
-  run.won === null && trip.bossKilled ? { ...run, won: { win: "warrior", day: run.day } } : run;
+// A trip that destroyed the boss wins the run as the Warrior, if it wasn't already won. Not while carrying
+// the Grand Haul: that trip is the Merchant's, won by delivering it.
+export const winsAsWarrior = (run: Run, trip: TripResult): boolean => run.won === null && trip.bossKilled && !carriesGrandHaul(run);
+
+export const withBossWin = (run: Run, trip: TripResult): Run => (winsAsWarrior(run, trip) ? { ...run, won: { win: "warrior", day: run.day } } : run);
 
 // Fuel burned, damage taken (lost parts are gone), bounties earned, kills made and salvage picked up.
 export const afterFlight = (run: Run, trip: TripResult): Run => ({

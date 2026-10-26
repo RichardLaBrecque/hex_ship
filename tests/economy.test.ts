@@ -213,6 +213,11 @@ describe("afterFlight", () => {
     expect(run.won).toEqual({ win: "warrior", day: 9 });
   });
 
+  it("doesn't win as the Warrior when the boss is destroyed carrying the Grand Haul", () => {
+    const run = afterFlight(testRun({ day: 9, cargo: [{ ...CONTRACT("G", 4), grand: true }] }), { ...quietTrip(testRun()), boss: true, bossKilled: true });
+    expect(run.won).toBeNull();
+  });
+
   it("keeps the first win when the boss is destroyed again", () => {
     const run = afterFlight(testRun({ won: { win: "merchant", day: 4 } }), { ...quietTrip(testRun()), boss: true, bossKilled: true });
     expect(run.won).toEqual({ win: "merchant", day: 4 });
@@ -513,6 +518,12 @@ describe("arrive", () => {
   it("wins the run as the Merchant on the day the Grand Haul is delivered", () => {
     const run = testRun({ day: 9, cargo: [{ ...CONTRACT("G", 4), grand: true }] });
     expect(arrive(run, quietTrip(run), 1, sequence(0), TEST_ECONOMY).run.won).toEqual({ win: "merchant", day: 10 });
+  });
+
+  it("wins as the Merchant when the Grand Haul's trip also destroyed the boss", () => {
+    const run = testRun({ day: 9, cargo: [{ ...CONTRACT("G", 4), grand: true }] });
+    const trip = { ...quietTrip(run), boss: true, bossKilled: true };
+    expect(arrive(run, trip, 1, sequence(0), TEST_ECONOMY).run.won).toEqual({ win: "merchant", day: 10 });
   });
 
   it("keeps the first win when the Grand Haul is delivered after it", () => {
