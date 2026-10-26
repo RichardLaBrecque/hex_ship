@@ -1,11 +1,14 @@
 import { Sound } from "./audio/sound";
 import { PLANETS } from "./data/balance";
+import { TUTORIAL } from "./data/tutorial";
 import { afterFlight, arrive, launch, newRun, towBack, withBossWin, type Run, type TripResult } from "./economy/run";
+import { tutorialRun } from "./economy/tutorial";
 import type { Win } from "./economy/victory";
 import { Input } from "./engine/input";
 import { startLoop } from "./engine/loop";
 import { SceneManager } from "./engine/scene";
 import { fitView } from "./engine/view";
+import { BriefingScene } from "./scenes/BriefingScene";
 import { FlightScene } from "./scenes/FlightScene";
 import { GameOverScene, type RunEnd } from "./scenes/GameOverScene";
 import { StationScene } from "./scenes/StationScene";
@@ -13,6 +16,7 @@ import { drawMuteButton, muteButtonRect } from "./render/muteButton";
 import { drawText, pointInRect, THEME, type Rect } from "./render/ui";
 import { addScore, loadRecords, saveRecords, scoreOf } from "./save/records";
 import { clearRun, loadRun, saveRun } from "./save/save";
+import { markTutorialDone, tutorialDone } from "./save/tutorial";
 
 const canvas = document.getElementById("game") as HTMLCanvasElement;
 const ctx = canvas.getContext("2d")!;
@@ -93,6 +97,56 @@ function startTrip(docked: Run): void {
   scenes.switchTo(flight);
 }
 
+// The tutorial: a briefing and then a flight for each leg in turn, then the finale and the game proper.
+// Losing the ship, turning back or running dry flies the same leg again. Nothing in it is saved or scored.
+function briefLeg(index: number, note?: string): void {
+  const leg = TUTORIAL.legs[index];
+  const run = tutorialRun(leg);
+  scenes.switchTo(
+    new BriefingScene({
+      kicker: `TUTORIAL ${index + 1} / ${TUTORIAL.legs.length}`,
+      title: leg.title,
+      paragraphs: leg.briefing,
+      ship: { name: leg.shipName, ship: run.ship },
+      note,
+      action: "Launch",
+      onContinue: () => flyLeg(index, run),
+      onSkip: finishTutorial,
+    }),
+  );
+}
+
+function flyLeg(index: number, run: Run): void {
+  scenes.switchTo(
+    new FlightScene({
+      run,
+      sound,
+      script: TUTORIAL.legs[index].flight,
+      onArrive: () => {
+        sound.dock();
+        if (index + 1 < TUTORIAL.legs.length) briefLeg(index + 1);
+        else showFinale();
+      },
+      onAbort: (trip) => briefLeg(index, trip.fuel > 0 ? "You turned back. Give it another go." : "You ran dry and were towed back. Burn a little less this time."),
+      onDestroyed: () => briefLeg(index, "The ship was destroyed. The yard has patched it up: try again."),
+      onVictory: () => {}, // a tutorial flight has no boss
+    }),
+  );
+}
+
+function showFinale(): void {
+  const { title, paragraphs } = TUTORIAL.finale;
+  scenes.switchTo(new BriefingScene({ kicker: "TUTORIAL COMPLETE", title, paragraphs, action: "Begin", onContinue: finishTutorial }));
+}
+
+// Finished or skipped: on to the game proper, or back to the run already under way when the tutorial was replayed.
+function finishTutorial(): void {
+  markTutorialDone();
+  const saved = loadRun();
+  if (saved) openStation(saved, `Back to your run. Day ${saved.day}, $${saved.money}.`);
+  else openStation(newRun(), "Welcome to Avalon, Captain. Your starter ship is fuelled: take a contract and launch.");
+}
+
 // The core is lost or the player ended the run: the save goes and the score joins the records.
 function endRun(run: Run, reason: RunEnd): void {
   const { records, newBests } = recordRun(run);
@@ -154,8 +208,12 @@ function withTrip(report: string, trip: TripResult): string {
   return `${report}${bounty}${salvage}`;
 }
 
+// A new player starts with the tutorial. Adding #tutorial to the address plays it again.
 const saved = loadRun();
-openStation(saved ?? newRun(), saved ? `Welcome back. Day ${saved.day}, $${saved.money}.` : undefined);
+const replayTutorial = window.location.hash === "#tutorial";
+if (replayTutorial) history.replaceState(null, "", playUrl());
+if (replayTutorial || (saved === null && !tutorialDone())) briefLeg(0);
+else openStation(saved ?? newRun(), saved ? `Welcome back. Day ${saved.day}, $${saved.money}.` : undefined);
 
 startLoop(
   (dt) => {

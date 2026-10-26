@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { activeLevels, bossDefeated, fillSlots, retarget, vacate, type Slot } from "../src/sim/roster";
+import { activeLevels, bossDefeated, clear, fillSlots, retarget, vacate, type Slot } from "../src/sim/roster";
 
 const ENC = { spawnDistance: 100, spawnSpread: 60, despawnDistance: 999, respawnDelay: 9, respawnDistance: 200 };
 
@@ -57,6 +57,13 @@ describe("vacate", () => {
 
   it("never refills the boss's slot once the boss is destroyed", () => {
     expect(vacate(slot({ level: "boss" }), true, ENC)).toEqual(slot({ level: "boss", filled: false, done: true }));
+  });
+});
+
+describe("clear", () => {
+  it("empties the slot for good", () => {
+    expect(clear(slot())).toEqual(slot({ filled: false, done: true }));
+    expect(fillSlots([clear(slot())], 99).due).toEqual([]);
   });
 });
 

@@ -3,6 +3,7 @@ import { COMBAT, ECONOMY, FLIGHT, PLANETS, type Planet } from "../data/balance";
 import { bossTier, DANGER, ENCOUNTERS, ENEMY_TIERS, type Encounter, type EnemyTier } from "../data/enemies";
 import { dangerTier, isBossTrip } from "../economy/danger";
 import { PARTS } from "../data/parts";
+import type { FlightScript } from "../data/tutorial";
 import { deliverableAt, holdUsed, planetDistance } from "../economy/contracts";
 import { pickSalvage, salvageUnits, type Salvage } from "../economy/salvage";
 import { bountyFor, winsAsWarrior, type TripResult, type Run } from "../economy/run";
@@ -23,7 +24,7 @@ import { bounce, findContact, ramDamage } from "../sim/collision";
 import { burnFuel, fuelRange } from "../sim/fuel";
 import { activeThrust, speed, stepBody, type Body } from "../sim/physics";
 import { collectPickups, pullPickups, stepPickups, type Pickup } from "../sim/pickups";
-import { activeLevels, bossDefeated, fillSlots, retarget, vacate, type Slot, type SlotLevel } from "../sim/roster";
+import { activeLevels, bossDefeated, clear, fillSlots, retarget, vacate, type Slot, type SlotLevel } from "../sim/roster";
 import { buildEnemy, guardBody, respawnBody, spawnBody } from "../sim/spawner";
 import { applyHit, hexWorld, isWrecked, makeVessel, setShip, type HitKind, type Vessel } from "../sim/vessel";
 import { fireWeapons, projectileHit, stepProjectile, weaponRange, type Beam, type Projectile } from "../sim/weapons";
@@ -35,6 +36,7 @@ export type FlightOptions = {
   onDestroyed: (trip: TripResult) => void; // the core was destroyed
   onVictory: (trip: TripResult) => void; // the boss was destroyed and the run is won; the flight can carry on after
   sound: Sound;
+  script?: FlightScript; // a tutorial flight, in place of the danger level's encounters
 };
 
 type Enemy = { vessel: Vessel; bounty: number; mode: AiMode; thrust: number; slot: number }; // slot: index into slots
@@ -101,20 +103,23 @@ export class FlightScene implements Scene {
     Array.from({ length: layer.count }, () => ({ x: Math.random() * STAR_FIELD, y: Math.random() * STAR_FIELD })),
   );
 
+  private script: FlightScript | null;
+
   constructor(private options: FlightOptions) {
     const { run } = options;
+    this.script = options.script ?? null;
     this.origin = run.docked;
     this.from = PLANETS[run.docked];
     const others = PLANETS.map((_, i) => i).filter((i) => i !== run.docked);
     const byDistance = (a: number, b: number): number => planetDistance(run.docked, a) - planetDistance(run.docked, b);
     this.hop = planetDistance(run.docked, [...others].sort(byDistance)[0]);
     // Launch facing the nearest planet some cargo is bound for, or else the nearest planet.
-    const bound = others.filter((i) => run.cargo.some((c) => c.to === i));
+    const bound = others.filter((i) => this.isBoundFor(i));
     const facing = PLANETS[[...(bound.length > 0 ? bound : others)].sort(byDistance)[0]];
     this.fuel = run.fuel;
     this.danger = dangerTier(run);
-    this.bossTrip = isBossTrip(run);
-    this.encounters = this.bossTrip ? DANGER.boss.encounters : DANGER.levels[this.danger - 1];
+    this.bossTrip = this.script === null && isBossTrip(run);
+    this.encounters = this.script?.encounters ?? (this.bossTrip ? DANGER.boss.encounters : DANGER.levels[this.danger - 1]);
     const grand = run.cargo.find((c) => c.grand);
     this.guarded = grand !== undefined && grand.to !== null ? PLANETS[grand.to] : null;
 
@@ -240,9 +245,9 @@ export class FlightScene implements Scene {
   }
 
   // Kills made this trip count toward notoriety straight away. When they raise danger, the trip switches to that
-  // level's encounters from where the ship is now. A boss trip is already at top danger.
+  // level's encounters from where the ship is now. A boss trip is already at top danger, and a scripted one keeps its own.
   private raiseDanger(): void {
-    if (this.bossTrip) return;
+    if (this.bossTrip || this.script !== null) return;
     const run = this.options.run;
     const now = dangerTier({ ...run, kills: run.kills + this.kills });
     if (now <= this.danger) return;
@@ -283,16 +288,18 @@ export class FlightScene implements Scene {
 
   // A fresh enemy for slots[index], at `body`.
   private spawnEnemy(slot: Slot, index: number, body: Body): void {
-    const tier: EnemyTier = slot.level === "boss" ? bossTier(shipValue(this.options.run.ship)) : ENEMY_TIERS[slot.level - 1];
+    const tiers = this.script?.tiers ?? ENEMY_TIERS;
+    const tier: EnemyTier = slot.level === "boss" ? bossTier(shipValue(this.options.run.ship)) : tiers[slot.level - 1];
     const ship = buildEnemy(tier, Math.random);
     const crew = computeShipStats(ship, 0).crewRequired; // enemies are always fully crewed
     const vessel = { ...makeVessel("enemy", ship, body, crew), aimError: tier.aimError };
     this.enemies.push({ vessel, bounty: bountyFor(ship), mode: "chase", thrust: 0, slot: index });
   }
 
-  // The enemy is out of the fight, so its slot starts counting down to a replacement.
+  // The enemy is out of the fight, so its slot starts counting down to a replacement. A scripted flight's enemies aren't replaced.
   private vacate(enemy: Enemy, destroyed: boolean): void {
-    this.slots[enemy.slot] = vacate(this.slots[enemy.slot], destroyed);
+    const slot = this.slots[enemy.slot];
+    this.slots[enemy.slot] = this.script !== null ? clear(slot) : vacate(slot, destroyed);
   }
 
   private isBoss(enemy: Enemy): boolean {
@@ -483,19 +490,25 @@ export class FlightScene implements Scene {
     return { x: body.x + Math.cos(angle) * 1000, y: body.y + Math.sin(angle) * 1000 };
   }
 
-  // The index of the planet whose dock zone the ship is in, or null. The planet it left doesn't count.
+  // The index of the planet whose dock zone the ship is in, or null. The planet it left doesn't count,
+  // and a scripted flight docks only where it's going.
   private dockZone(): number | null {
-    const i = PLANETS.findIndex((p, i) => i !== this.origin && distance(this.player.body, p) < p.dockRadius);
+    const dockable = (i: number): boolean => (this.script !== null ? i === this.script.to : i !== this.origin);
+    const i = PLANETS.findIndex((p, i) => dockable(i) && distance(this.player.body, p) < p.dockRadius);
     return i >= 0 ? i : null;
   }
 
-  // Whether docking at `planet` would deliver any of the cargo aboard, open cargo included.
+  // Whether docking at `planet` would deliver any of the cargo aboard, open cargo included. A scripted flight
+  // delivers wherever it's going, even with an empty hold: there the ship itself is the delivery.
   private hasCargoFor(planet: number): boolean {
+    if (this.script !== null) return planet === this.script.to;
     return this.options.run.cargo.some((c) => deliverableAt(c, planet));
   }
 
   // Whether some cargo aboard is bound for `planet` in particular. Open cargo alone doesn't count, since it goes anywhere.
+  // A scripted flight is bound wherever it's going.
   private isBoundFor(planet: number): boolean {
+    if (this.script !== null) return planet === this.script.to;
     return this.options.run.cargo.some((c) => c.to === planet);
   }
 
@@ -775,15 +788,18 @@ export class FlightScene implements Scene {
     const salvaged = this.salvage.length > 0 ? `  ·  ${this.salvage.length} salvaged` : "";
     drawText(ctx, `Cargo ${hold} / ${s.cargoCapacity} units${salvaged}`, 20, 130, { color: this.holdFull > 0 ? THEME.bad : THEME.muted });
     const boss = this.bossTrip ? "  ·  BOSS" : "";
-    drawText(ctx, `Day ${this.options.run.day}  ·  $${this.options.run.money}  ·  Danger ${this.danger}${boss}`, 20, 150, {
-      color: this.bossTrip ? THEME.bad : THEME.muted,
-    });
+    const status = this.script !== null ? "Tutorial" : `Day ${this.options.run.day}  ·  $${this.options.run.money}  ·  Danger ${this.danger}${boss}`;
+    drawText(ctx, status, 20, 150, { color: this.bossTrip ? THEME.bad : THEME.muted });
     drawText(ctx, `Bounties $${this.bounty} (${this.kills} kill${this.kills === 1 ? "" : "s"})`, 20, 170, {
       color: this.bounty > 0 ? THEME.good : THEME.muted,
     });
     this.renderFuelGauge(ctx, 20, 192);
     this.renderHalfRange(ctx, 20, 230);
 
+    if (this.script !== null) {
+      const hint = this.touch ? this.script.hint.touch : this.script.hint.keys;
+      hint.forEach((line, i) => drawText(ctx, line, width / 2, 26 + i * 22, { align: "center", size: 15, bold: i === 0, color: THEME.accent }));
+    }
     if (this.dangerFlash > 0) {
       drawText(ctx, `DANGER RISING: ${this.danger}`, width / 2, 70, { align: "center", size: 22, bold: true, color: THEME.bad });
     }
@@ -797,7 +813,8 @@ export class FlightScene implements Scene {
       drawText(ctx, "CORE DESTROYED", width / 2, height / 2 - 90, { align: "center", size: 28, bold: true, color: THEME.bad });
     } else if (this.fuel <= 0) {
       drawText(ctx, "OUT OF FUEL", width / 2, height / 2 - 90, { align: "center", size: 24, bold: true, color: THEME.bad });
-      drawText(ctx, `${this.touch ? "Call tow" : "Esc"}: call a tow back to ${this.from.name} (−$${ECONOMY.towFee})`, width / 2, height / 2 - 62, {
+      const tow = this.script !== null ? `fly this leg again from ${this.from.name}` : `call a tow back to ${this.from.name} (−$${ECONOMY.towFee})`;
+      drawText(ctx, `${this.touch ? "Call tow" : "Esc"}: ${tow}`, width / 2, height / 2 - 62, {
         align: "center",
         size: 15,
         color: THEME.text,

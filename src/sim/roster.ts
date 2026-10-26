@@ -7,7 +7,7 @@ export type Slot = {
   level: SlotLevel;
   filled: boolean; // an enemy is in the fight for this slot
   wait: number; // seconds until an empty slot fills again
-  done: boolean; // the boss was destroyed: the slot stays empty
+  done: boolean; // its enemy is gone for good, like a destroyed boss: the slot stays empty
   retired: boolean; // the danger level no longer wants this slot: its enemy fights on, but isn't replaced
 };
 
@@ -38,12 +38,15 @@ export function retarget(slots: readonly Slot[], wanted: readonly SlotLevel[]): 
 
 // The slot's enemy is gone. `destroyed` is false when it escaped instead.
 export function vacate(slot: Slot, destroyed: boolean, enc: Encounters = ENCOUNTERS): Slot {
-  if (slot.level === "boss" && destroyed) return { ...slot, filled: false, done: true };
+  if (slot.level === "boss" && destroyed) return clear(slot);
   return { ...slot, filled: false, wait: enc.respawnDelay };
 }
 
+// The slot's enemy is gone and won't be replaced.
+export const clear = (slot: Slot): Slot => ({ ...slot, filled: false, done: true });
+
 // Counts down the empty slots. Returns the new slots and the indexes of those due to fill now, marked filled.
-// Retired slots and a destroyed boss's slot never fill.
+// Retired and cleared slots never fill.
 export function fillSlots(slots: readonly Slot[], dt: number): { slots: Slot[]; due: number[] } {
   const due: number[] = [];
   const next = slots.map((slot, i) => {
