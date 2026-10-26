@@ -16,6 +16,8 @@ const WIN_DEEDS: Record<Win, string> = {
 
 export const deliveredGrandHaul = (delivered: readonly Contract[]): boolean => delivered.some((c) => c.grand);
 
+export const carriesGrandHaul = (run: Run): boolean => run.cargo.some((c) => c.grand);
+
 // A few lines to paste for friends: how the run was won, its score columns, and where to play.
 export function shareText(run: Run, win: Win, url: string): string {
   return [

@@ -12,7 +12,7 @@ const TEST_DANGER: Danger = {
   dropBuffer: 20,
   killsPerTier: 5,
   levels: [[], [], []],
-  boss: { every: 3, valueShare: 0.5, encounters: [] },
+  boss: { every: 3, valueShare: 0.5, guardRange: 9, encounters: [] },
 };
 
 // a bridge ($0) plus some $100 engines
@@ -85,14 +85,17 @@ describe("dangerTier", () => {
   });
 
   it("is the highest level while the Grand Haul is aboard", () => {
-    const grand = { id: "9", cargo: "GRAND", units: 9, payPerUnit: 9, tier: 0, from: 0, to: 1, grand: true };
-    expect(dangerTier(run({ ship: shipWorth(0), kills: 0, cargo: [grand] }), TEST_PARTS, TEST_DANGER)).toBe(3);
+    expect(dangerTier(run({ ship: shipWorth(0), kills: 0, cargo: [GRAND] }), TEST_PARTS, TEST_DANGER)).toBe(3);
   });
 });
 
 describe("dangerOutlook", () => {
   it("shows the next checkpoint and the kills still needed", () => {
     expect(dangerOutlook(run({ kills: 3 }), TEST_PARTS, TEST_DANGER)).toEqual({ tier: 1, nextValue: 100, killsToNext: 2, bossIn: null });
+  });
+
+  it("shows the boss next while the Grand Haul is aboard", () => {
+    expect(dangerOutlook(run({ ship: shipWorth(0), topTrips: 0, cargo: [GRAND] }), TEST_PARTS, TEST_DANGER).bossIn).toBe(1);
   });
 
   it("counts down to the boss at the top level", () => {
@@ -111,6 +114,11 @@ describe("isBossTrip", () => {
     expect(bossTrips).toEqual([2, 5, 8]);
   });
 
+  it("is every trip carrying the Grand Haul", () => {
+    const bossTrips = [0, 1, 2, 3].filter((topTrips) => isBossTrip(run({ ship: shipWorth(0), topTrips, cargo: [GRAND] }), TEST_PARTS, TEST_DANGER));
+    expect(bossTrips).toEqual([0, 1, 2, 3]);
+  });
+
   it("is never below the top level", () => {
     expect(isBossTrip(run({ ship: shipWorth(1), topTrips: 2 }), TEST_PARTS, TEST_DANGER)).toBe(false);
   });
@@ -122,3 +130,5 @@ describe("bossTier", () => {
     expect(bossTier(1000, TEST_DANGER).budget).toEqual({ min: 500, max: 500 });
   });
 });
+
+const GRAND = { id: "9", cargo: "GRAND", units: 9, payPerUnit: 9, tier: 0, from: 0, to: 1, grand: true };

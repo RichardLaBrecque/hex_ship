@@ -2,6 +2,7 @@ import { DANGER, type Danger } from "../data/enemies";
 import { PARTS, type PartCatalog } from "../data/parts";
 import { shipValue } from "../ship/ship";
 import type { Run } from "./run";
+import { carriesGrandHaul } from "./victory";
 
 // The ship-value tier. It rises as soon as a checkpoint is reached, but only drops back once the
 // value falls `dropBuffer` under that checkpoint, so selling one part can't flip it back and forth.
@@ -16,13 +17,15 @@ export const notorietyTier = (kills: number, danger: Danger = DANGER): number =>
 // The danger tier a launch right now would fly at, capped at the highest defined level.
 // Carrying the Grand Haul puts it at the top level.
 export function dangerTier(run: Run, catalog: PartCatalog = PARTS, danger: Danger = DANGER): number {
-  if (run.cargo.some((c) => c.grand)) return danger.levels.length;
+  if (carriesGrandHaul(run)) return danger.levels.length;
   const byValue = valueTier(shipValue(run.ship, catalog), run.valueTier, danger);
   return Math.min(danger.levels.length, Math.max(byValue, notorietyTier(run.kills, danger)));
 }
 
 // Trips until the boss at top danger: 1 means the next launch meets it. Trips only count once they arrive.
-export const tripsToBoss = (run: Run, danger: Danger = DANGER): number => danger.boss.every - (run.topTrips % danger.boss.every);
+// The boss meets every trip carrying the Grand Haul.
+export const tripsToBoss = (run: Run, danger: Danger = DANGER): number =>
+  carriesGrandHaul(run) ? 1 : danger.boss.every - (run.topTrips % danger.boss.every);
 
 // The next launch flies at top danger and meets the boss.
 export const isBossTrip = (run: Run, catalog: PartCatalog = PARTS, danger: Danger = DANGER): boolean =>

@@ -61,6 +61,14 @@ export function respawnBody(player: Body, random: Random, enc: Encounters = ENCO
   return { x, y, vx: 0, vy: 0, angle: Math.atan2(player.y - y, player.x - x), spin: 0 };
 }
 
+// A guard waiting `standoff` from `planet` on the side the player is coming from, facing the player.
+export function guardBody(planet: Point, standoff: number, player: Body): Body {
+  const angle = Math.atan2(player.y - planet.y, player.x - planet.x);
+  const x = planet.x + Math.cos(angle) * standoff;
+  const y = planet.y + Math.sin(angle) * standoff;
+  return { x, y, vx: 0, vy: 0, angle: Math.atan2(player.y - y, player.x - x), spin: 0 };
+}
+
 // Somewhere ahead of the player toward `toward`, a little off the route, facing the player.
 export function spawnBody(player: Body, toward: Point, random: Random, enc: Encounters = ENCOUNTERS): Body {
   const route = Math.atan2(toward.y - player.y, toward.x - player.x);

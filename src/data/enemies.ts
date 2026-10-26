@@ -116,9 +116,11 @@ export const DANGER = {
   ] as readonly (readonly Encounter[])[],
   // At top danger every `every`th trip (counting trips that arrived) is a boss trip, flying these encounters instead.
   // A boss trip that arrives without destroying the boss doesn't count, so the next trip is a boss trip too.
+  // Every trip carrying the Grand Haul is a boss trip.
   boss: {
     every: 3,
     valueShare: 0.8, // the boss's parts cost this share of the player's ship value
+    guardRange: 3000, // carrying the Grand Haul, the boss waits at its destination instead, arriving once the ship is this close
     encounters: [
       { at: 0.3, enemies: [3] },
       { at: 0.7, enemies: [], boss: true },

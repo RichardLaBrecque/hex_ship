@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { EnemyTier } from "../src/data/enemies";
 import { shipValue } from "../src/ship/ship";
 import { validateShip } from "../src/ship/validate";
-import { buildEnemy, respawnBody, spawnBody } from "../src/sim/spawner";
+import { buildEnemy, guardBody, respawnBody, spawnBody } from "../src/sim/spawner";
 import { TEST_PARTS } from "./catalog";
 import { seeded } from "./random";
 
@@ -63,6 +63,16 @@ describe("spawnBody", () => {
   it("strays no more than the spread off the route", () => {
     const body = spawnBody({ x: 0, y: 0, vx: 0, vy: 0, angle: 0, spin: 0 }, { x: 500, y: 0 }, () => 1, ENC);
     expect(Math.atan2(body.y, body.x)).toBeCloseTo(Math.PI / 3);
+  });
+});
+
+describe("guardBody", () => {
+  it("waits standoff from the planet on the player's side, facing the player", () => {
+    // the player is straight below the planet
+    const body = guardBody({ x: 10, y: 10 }, 90, { x: 10, y: 900, vx: 0, vy: 0, angle: 0, spin: 0 });
+    expect(body.x).toBeCloseTo(10);
+    expect(body.y).toBeCloseTo(100);
+    expect(body.angle).toBeCloseTo(Math.PI / 2);
   });
 });
 

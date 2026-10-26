@@ -62,7 +62,7 @@ const TEST_PLANETS: readonly Planet[] = [planet(0), planet(1000), planet(3000)];
 // A trip at danger 1 that changed nothing: no fuel burned, no damage, no kills.
 const quietTrip = (run: Run): TripResult => ({ fuel: run.fuel, ship: run.ship, bounty: 0, kills: 0, salvage: [], danger: 1, boss: false, bossKilled: false });
 
-const NO_BOSS = { every: 3, valueShare: 1, encounters: [] };
+const NO_BOSS = { every: 3, valueShare: 1, guardRange: 9, encounters: [] };
 
 function testRun(overrides: Partial<Run> = {}): Run {
   return {

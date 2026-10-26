@@ -23,8 +23,8 @@ import { bounce, findContact, ramDamage } from "../sim/collision";
 import { burnFuel, fuelRange } from "../sim/fuel";
 import { activeThrust, speed, stepBody, type Body } from "../sim/physics";
 import { collectPickups, pullPickups, stepPickups, type Pickup } from "../sim/pickups";
-import { activeLevels, bossDefeated, fillSlots, retarget, vacate, type Slot } from "../sim/roster";
-import { buildEnemy, respawnBody, spawnBody } from "../sim/spawner";
+import { activeLevels, bossDefeated, fillSlots, retarget, vacate, type Slot, type SlotLevel } from "../sim/roster";
+import { buildEnemy, guardBody, respawnBody, spawnBody } from "../sim/spawner";
 import { applyHit, hexWorld, isWrecked, makeVessel, setShip, type HitKind, type Vessel } from "../sim/vessel";
 import { fireWeapons, projectileHit, stepProjectile, weaponRange, type Beam, type Projectile } from "../sim/weapons";
 
@@ -82,6 +82,8 @@ export class FlightScene implements Scene {
   private bossTrip: boolean; // the encounters end with a boss (see isBossTrip)
   private encounters: readonly Encounter[]; // the danger level's encounters, in route order
   private reached = 0; // the farthest progress so far: encounters at or before it have triggered
+  private guarded: Planet | null; // the Grand Haul's destination, where the boss waits instead of on the route
+  private guardMet = false; // the ship came within guardRange of the guarded planet, so the boss has arrived
   private slots: Slot[] = []; // the enemies triggered encounters keep active (see roster.ts)
   private bounty = 0;
   private kills = 0;
@@ -113,6 +115,8 @@ export class FlightScene implements Scene {
     this.danger = dangerTier(run);
     this.bossTrip = isBossTrip(run);
     this.encounters = this.bossTrip ? DANGER.boss.encounters : DANGER.levels[this.danger - 1];
+    const grand = run.cargo.find((c) => c.grand);
+    this.guarded = grand !== undefined && grand.to !== null ? PLANETS[grand.to] : null;
 
     const heading = Math.atan2(facing.y - this.from.y, facing.x - this.from.x);
     const startDistance = this.from.radius + 80;
@@ -202,9 +206,10 @@ export class FlightScene implements Scene {
     this.reached = Math.max(this.reached, this.progress());
     this.dangerFlash = Math.max(0, this.dangerFlash - dt);
     this.raiseDanger();
-    const roster = retarget(this.slots, activeLevels(this.encounters, this.reached));
+    if (this.guarded !== null) this.guardMet ||= distance(player.body, this.guarded) < DANGER.boss.guardRange;
+    const roster = retarget(this.slots, this.wantedLevels());
     this.slots = roster.slots;
-    for (const i of roster.added) this.spawnEnemy(this.slots[i], i, spawnBody(player.body, this.ahead(), Math.random));
+    for (const i of roster.added) this.spawnEnemy(this.slots[i], i, this.arrivalBody(this.slots[i]));
     const refill = fillSlots(this.slots, dt);
     this.slots = refill.slots;
     for (const i of refill.due) this.spawnEnemy(this.slots[i], i, respawnBody(player.body, Math.random));
@@ -244,6 +249,21 @@ export class FlightScene implements Scene {
     this.danger = now;
     this.encounters = DANGER.levels[now - 1];
     this.dangerFlash = DANGER_FLASH_SECONDS;
+  }
+
+  // The enemies the encounters triggered so far keep active. Carrying the Grand Haul, the boss joins only once the
+  // ship nears its destination, however far along the route the ship is.
+  private wantedLevels(): SlotLevel[] {
+    const levels = activeLevels(this.encounters, this.reached);
+    if (this.guarded === null) return levels;
+    return [...levels.filter((level) => level !== "boss"), ...(this.guardMet ? ["boss" as const] : [])];
+  }
+
+  // Where a newly triggered enemy arrives: ahead of the ship, or for a boss guarding the Grand Haul's destination, there.
+  private arrivalBody(slot: Slot): Body {
+    const player = this.player.body;
+    if (slot.level === "boss" && this.guarded !== null) return guardBody(this.guarded, this.guarded.dockRadius, player);
+    return spawnBody(player, this.ahead(), Math.random);
   }
 
   // A tractor beam pulls salvage in, and flying into salvage picks it up, as long as the hold has room for it.
