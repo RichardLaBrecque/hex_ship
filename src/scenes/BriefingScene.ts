@@ -1,6 +1,7 @@
 import type { Input } from "../engine/input";
 import type { Scene } from "../engine/scene";
 import { drawShip } from "../render/drawShip";
+import type { Point } from "../hex/hex";
 import { drawButton, drawPanel, drawText, pointInRect, THEME, wrapText, type Rect } from "../render/ui";
 import type { Ship } from "../ship/ship";
 
@@ -23,6 +24,7 @@ const SHIP_HEX = 22;
 // A story card between tutorial flights: what's happening, the ship to fly, and buttons to go on or skip.
 export class BriefingScene implements Scene {
   private touch = false;
+  private mouse: Point = { x: 0, y: 0 };
   private continueButton: Rect | null = null; // laid out at the last render
   private skipButton: Rect | null = null; // laid out at the last render, when the card can be skipped
 
@@ -30,6 +32,7 @@ export class BriefingScene implements Scene {
 
   update(_dt: number, input: Input): void {
     this.touch = input.usingTouch;
+    this.mouse = input.mouse;
     const clicked = (r: Rect | null): boolean => r !== null && input.wasClicked(0) && pointInRect(input.mouse, r);
     const { onContinue, onSkip } = this.options;
     if (onSkip && (input.wasPressed("Escape") || clicked(this.skipButton))) {
@@ -76,11 +79,18 @@ export class BriefingScene implements Scene {
 
     const buttonY = bottom - 60;
     this.continueButton = { x: panel.x + panel.w - 24 - 200, y: buttonY, w: 200, h: 44 };
-    drawButton(ctx, this.continueButton, this.touch ? action : `${action} (Enter)`, { enabled: true, hovered: false });
+    drawButton(ctx, this.continueButton, this.touch ? action : `${action} (Enter)`, {
+      enabled: true,
+      hovered: pointInRect(this.mouse, this.continueButton),
+    });
     this.skipButton = null;
     if (onSkip) {
       this.skipButton = { x: left, y: buttonY, w: 200, h: 44 };
-      drawButton(ctx, this.skipButton, this.touch ? "Skip tutorial" : "Skip tutorial (Esc)", { enabled: true, hovered: false });
+      drawButton(ctx, this.skipButton, this.touch ? "Skip tutorial" : "Skip tutorial (Esc)", {
+        enabled: true,
+        hovered: pointInRect(this.mouse, this.skipButton),
+        secondary: true,
+      });
     }
   }
 }

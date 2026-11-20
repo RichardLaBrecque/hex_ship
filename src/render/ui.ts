@@ -65,20 +65,28 @@ export function fitText(ctx: CanvasRenderingContext2D, text: string, maxWidth: n
   return `${cut.trimEnd()}…`;
 }
 
+// A secondary button is drawn quieter, as an outline that lights up on hover, so the primary action beside it stands out.
 export function drawButton(
   ctx: CanvasRenderingContext2D,
   r: Rect,
   label: string,
-  state: { enabled: boolean; hovered: boolean },
+  state: { enabled: boolean; hovered: boolean; secondary?: boolean },
 ): void {
-  ctx.fillStyle = !state.enabled ? "#1a2233" : state.hovered ? "#2f5ea8" : "#244a85";
+  const { enabled, hovered, secondary } = state;
+  if (!enabled) {
+    ctx.fillStyle = "#1a2233";
+  } else if (secondary) {
+    ctx.fillStyle = hovered ? "#1e2c48" : THEME.panel;
+  } else {
+    ctx.fillStyle = hovered ? "#2f5ea8" : "#244a85";
+  }
   ctx.fillRect(r.x, r.y, r.w, r.h);
-  ctx.strokeStyle = state.enabled ? THEME.accent : THEME.panelBorder;
+  ctx.strokeStyle = enabled && (!secondary || hovered) ? THEME.accent : THEME.panelBorder;
   ctx.strokeRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1);
   drawText(ctx, label, r.x + r.w / 2, r.y + r.h / 2, {
     size: 15,
     bold: true,
     align: "center",
-    color: state.enabled ? THEME.text : THEME.muted,
+    color: enabled && (!secondary || hovered) ? THEME.text : THEME.muted,
   });
 }
