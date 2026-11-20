@@ -1,6 +1,7 @@
 import type { Run } from "../economy/run";
 import { shareText, WIN_TITLES, type Win } from "../economy/victory";
 import type { Input } from "../engine/input";
+import type { Point } from "../hex/hex";
 import type { Scene } from "../engine/scene";
 import { drawButton, drawText, pointInRect, THEME, type Rect } from "../render/ui";
 import type { NewBests, Records } from "../save/records";
@@ -32,8 +33,9 @@ const WIN_SUMMARIES: Record<Win, (day: number) => string> = {
 const isWin = (reason: RunEnd): reason is Win => reason === "warrior" || reason === "merchant";
 
 export class GameOverScene implements Scene {
-  private touch = false; // on a touch screen there's a New run button instead of the Enter hint
-  private newRunButton: Rect | null = null; // laid out at the last render, while on touch
+  private touch = false; // on a touch screen the buttons leave out their keys and are taller
+  private mouse: Point = { x: 0, y: 0 };
+  private newRunButton: Rect | null = null; // laid out at the last render
   private shareButton: Rect | null = null; // laid out at the last render, for a won run
   private keepButton: Rect | null = null; // laid out at the last render, while play can go on
   private shareNote = ""; // what came of the last share
@@ -42,6 +44,7 @@ export class GameOverScene implements Scene {
 
   update(_dt: number, input: Input): void {
     this.touch = input.usingTouch;
+    this.mouse = input.mouse;
     const clicked = (r: Rect | null): boolean => r !== null && input.wasClicked(0) && pointInRect(input.mouse, r);
     const { run, keepPlaying } = this.options;
     const win = this.win();
@@ -113,21 +116,19 @@ export class GameOverScene implements Scene {
     this.shareButton = null;
     this.keepButton = null;
     this.newRunButton = null;
-    // A row of buttons: share a won run, keep playing a run just won, and (on touch) start a new run.
+    // A row of buttons: share a won run, keep playing a run just won, and start a new run (ending this one, if it
+    // could go on).
     const row: { label: string; set: (r: Rect) => void }[] = [];
     if (win) row.push({ label: this.touch ? "Share result" : "Copy result (C)", set: (r) => (this.shareButton = r) });
     if (keepPlaying) row.push({ label: this.touch ? keepPlaying.label : `${keepPlaying.label} (K)`, set: (r) => (this.keepButton = r) });
-    if (this.touch) row.push({ label: keepPlaying ? "End run" : "New run", set: (r) => (this.newRunButton = r) });
+    const restart = keepPlaying ? "End run" : "New run";
+    row.push({ label: this.touch ? restart : `${restart} (Enter)`, set: (r) => (this.newRunButton = r) });
     const left = width / 2 - (row.length * 200 + (row.length - 1) * 16) / 2;
     row.forEach((button, i) => {
       const r = { x: left + i * 216, y: bottom - 22, w: 200, h: this.touch ? 44 : 40 };
       button.set(r);
-      drawButton(ctx, r, button.label, { enabled: true, hovered: false });
+      drawButton(ctx, r, button.label, { enabled: true, hovered: pointInRect(this.mouse, r) });
     });
-    if (!this.touch) {
-      const hint = keepPlaying ? "Enter: end the run and start a new one" : "Enter: start a new run";
-      drawText(ctx, hint, width / 2, row.length > 0 ? bottom + 40 : bottom, { align: "center", size: 15, color: THEME.accent });
-    }
-    if (this.shareNote) drawText(ctx, this.shareNote, width / 2, bottom + (this.touch ? 40 : 66), { align: "center", size: 13, color: THEME.good });
+    if (this.shareNote) drawText(ctx, this.shareNote, width / 2, bottom + 40, { align: "center", size: 13, color: THEME.good });
   }
 }
