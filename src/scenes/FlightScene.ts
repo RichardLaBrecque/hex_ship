@@ -777,6 +777,7 @@ export class FlightScene implements Scene {
   }
 
   private renderHud(ctx: CanvasRenderingContext2D, width: number, height: number): void {
+    this.controls = touchControlRects(width, height);
     const s = this.player.stats;
     const nearest = this.nearestPlanet();
     drawText(ctx, `Left ${this.from.name}`, 20, 26, { size: 16, bold: true });
@@ -794,7 +795,9 @@ export class FlightScene implements Scene {
       color: this.bounty > 0 ? THEME.good : THEME.muted,
     });
     this.renderFuelGauge(ctx, 20, 192);
-    this.renderHalfRange(ctx, 20, 230);
+    // On touch the Turn back button sits under the fuel gauge, so the list goes below it.
+    const { back } = this.controls;
+    this.renderHalfRange(ctx, 20, this.touch ? back.y + back.h + 18 : 230);
 
     if (this.script !== null) {
       const hint = this.touch ? this.script.hint.touch : this.script.hint.keys;
@@ -826,7 +829,6 @@ export class FlightScene implements Scene {
       const cargo = this.hasCargoFor(dock) ? "" : " (no cargo for here)";
       drawText(ctx, `Slow down to dock at ${PLANETS[dock].name}${cargo}`, width / 2, height - 70, { align: "center", size: 18, bold: true, color: THEME.warn });
     }
-    this.controls = touchControlRects(width, height);
     if (this.touch) {
       if (this.wreckTimer === null && this.victoryTimer === null) drawTouchControls(ctx, this.controls, this.held, this.fuel > 0 ? "Turn back" : "Call tow");
       return;
