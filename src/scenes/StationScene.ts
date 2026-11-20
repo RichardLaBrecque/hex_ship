@@ -446,6 +446,7 @@ export class StationScene implements Scene {
       ? "Left-click buy & place · Right-click sell · R / Shift+R rotate · Esc or click part again to stop building"
       : "Click a part to select it · R / Shift+R rotate · Del sell · 1-8 pick a part to build";
     drawText(ctx, help, this.gridCenter.x, height - 18, { align: "center", color: THEME.muted, size: 12 });
+    this.renderMessage(ctx, this.gridCenter.x, TOP_BAR + 8, centerRight - centerLeft, 15);
   }
 
   // The grid on the left at full height; one tab of the side panel at a time on the right.
@@ -455,13 +456,7 @@ export class StationScene implements Scene {
     this.hexSize = layout.hexSize;
     this.gridCenter = { x: grid.x + grid.w / 2, y: grid.y + grid.h / 2 };
     this.renderGrid(ctx);
-    if (this.messageTimer > 0) {
-      let y = grid.y + 10;
-      for (const lineText of wrapText(ctx, this.message, grid.w, 14)) {
-        drawText(ctx, lineText, this.gridCenter.x, y, { align: "center", size: 14, bold: true, color: this.messageColor });
-        y += 18;
-      }
-    }
+    this.renderMessage(ctx, this.gridCenter.x, grid.y + 14, grid.w, 14);
 
     const planet = PLANETS[this.run.docked];
     const statusY = layout.status.y + layout.status.h / 2;
@@ -587,9 +582,21 @@ export class StationScene implements Scene {
       size: 15,
       bold: true,
     });
-    if (this.messageTimer > 0) {
-      drawText(ctx, this.message, this.gridCenter.x, TOP_BAR + 8, { align: "center", size: 15, bold: true, color: this.messageColor });
-    }
+  }
+
+  // The flashed message, if any: wrapped to `maxWidth` and centered on `centerX` from `top` down, on a panel so it
+  // reads over the grid. Drawn after the grid, which would otherwise paint over it.
+  private renderMessage(ctx: CanvasRenderingContext2D, centerX: number, top: number, maxWidth: number, size: number): void {
+    if (this.messageTimer <= 0) return;
+    const pad = 10;
+    const lineHeight = size + 4;
+    const lines = wrapText(ctx, this.message, maxWidth - 2 * pad, size);
+    ctx.font = `600 ${size}px system-ui, sans-serif`;
+    const width = Math.min(maxWidth, Math.max(...lines.map((lineText) => ctx.measureText(lineText).width)) + 2 * pad);
+    drawPanel(ctx, { x: centerX - width / 2, y: top - lineHeight / 2 - 4, w: width, h: lines.length * lineHeight + 8 });
+    lines.forEach((lineText, i) => {
+      drawText(ctx, lineText, centerX, top + i * lineHeight, { align: "center", size, bold: true, color: this.messageColor });
+    });
   }
 
   private renderGrid(ctx: CanvasRenderingContext2D): void {
