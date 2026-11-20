@@ -446,7 +446,7 @@ export class StationScene implements Scene {
       ? "Left-click install · R / Shift+R rotate · Esc stop installing"
       : this.tool
       ? "Left-click buy & place · Right-click sell · R / Shift+R rotate · Esc or click part again to stop building"
-      : "Click a part to select it · R / Shift+R rotate · Del sell · 1-8 pick a part to build";
+      : `Click a part to select it · R / Shift+R rotate · Del sell · 1-${BUILDABLE.length} pick a part to build`;
     drawText(ctx, help, this.gridCenter.x, height - 18, { align: "center", color: THEME.muted, size: 12 });
     this.renderMessage(ctx, this.gridCenter.x, TOP_BAR + 8, centerRight - centerLeft, 15);
   }
