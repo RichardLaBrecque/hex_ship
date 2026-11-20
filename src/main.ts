@@ -73,7 +73,7 @@ function startTrip(docked: Run): void {
       const { run, delivered, earned } = arrive(flying, trip, planet);
       const report =
         delivered.length > 0
-          ? `Delivered ${delivered.length} contract(s): +$${earned}`
+          ? `Delivered ${delivered.length} contract${delivered.length === 1 ? "" : "s"}: +$${earned}`
           : run.cargo.length > 0
             ? `No cargo bound for ${PLANETS[planet].name}.`
             : "Arrived with an empty hold.";
@@ -204,7 +204,7 @@ const muteButton = (): Rect => scenes.scene?.muteButton?.(width, height) ?? mute
 function withTrip(report: string, trip: TripResult): string {
   const bounty = trip.bounty > 0 ? ` Bounties: +$${trip.bounty}.` : "";
   const count = trip.salvage.length;
-  const salvage = count > 0 ? ` Salvaged ${count} part${count === 1 ? "" : "s"}: see Cargo.` : "";
+  const salvage = count > 0 ? ` Salvaged ${count} part${count === 1 ? "" : "s"}: install or sell ${count === 1 ? "it" : "them"} from the hold.` : "";
   return `${report}${bounty}${salvage}`;
 }
 
