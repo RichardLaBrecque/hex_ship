@@ -38,7 +38,9 @@ const MAX_HEX_SIZE = 28;
 const GRID_RADIUS = 5;
 const PALETTE_WIDTH = 230;
 const SIDE_WIDTH = 280;
-const ROW_HEIGHT = 44;
+const ROW_HEIGHT = 44; // a palette row, on screens tall enough for it
+const MIN_ROW_HEIGHT = 34;
+const PART_INFO_HEIGHT = 260; // room under the palette for the longest part info, a selected Laser Pod
 const TOP_BAR = 64;
 const BOARD_HEIGHT = 128;
 const ACTION_BAR = 36; // under the grid: rotate, sell and done buttons for players without a keyboard
@@ -688,7 +690,10 @@ export class StationScene implements Scene {
     drawPanel(ctx, panel);
     drawText(ctx, "PARTS", panel.x + 14, panel.y + 22, { bold: true, color: THEME.muted });
 
-    this.paletteRows = BUILDABLE.map((_, i) => ({ x: panel.x + 6, y: panel.y + 40 + i * ROW_HEIGHT, w: panel.w - 12, h: ROW_HEIGHT - 4 }));
+    // Rows shrink on short screens so the part info under them isn't cut off.
+    const rowHeight = Math.max(MIN_ROW_HEIGHT, Math.min(ROW_HEIGHT, (panel.h - 64 - PART_INFO_HEIGHT) / BUILDABLE.length));
+    const iconSize = Math.min(16, (rowHeight - 4) / 2);
+    this.paletteRows = BUILDABLE.map((_, i) => ({ x: panel.x + 6, y: panel.y + 40 + i * rowHeight, w: panel.w - 12, h: rowHeight - 4 }));
     BUILDABLE.forEach((id, i) => {
       const r = this.paletteRows[i];
       const def = PARTS[id];
@@ -703,15 +708,15 @@ export class StationScene implements Scene {
       }
       ctx.save();
       ctx.translate(r.x + 26, r.y + r.h / 2);
-      drawPart(ctx, { hex: { q: 0, r: 0 }, type: id, rotation: id === "engine" ? 3 : 0, hp: def.maxHp }, 16, false);
+      drawPart(ctx, { hex: { q: 0, r: 0 }, type: id, rotation: id === "engine" ? 3 : 0, hp: def.maxHp }, iconSize, false);
       ctx.restore();
-      drawText(ctx, def.name, r.x + 52, r.y + 14, { bold: isSelected });
+      drawText(ctx, def.name, r.x + 52, r.y + r.h / 2 - 7, { bold: isSelected });
       const affordable = this.run.money >= def.cost;
-      drawText(ctx, `$${def.cost}`, r.x + 52, r.y + 29, { size: 12, color: affordable ? THEME.muted : THEME.bad });
+      drawText(ctx, `$${def.cost}`, r.x + 52, r.y + r.h / 2 + 8, { size: 12, color: affordable ? THEME.muted : THEME.bad });
       drawText(ctx, String(i + 1), r.x + r.w - 10, r.y + r.h / 2, { align: "right", color: THEME.muted });
     });
 
-    this.renderPartInfo(ctx, panel.x + 14, panel.y + 40 + BUILDABLE.length * ROW_HEIGHT + 16, panel.w - 28, panel.y + panel.h - 8);
+    this.renderPartInfo(ctx, panel.x + 14, panel.y + 40 + BUILDABLE.length * rowHeight + 16, panel.w - 28, panel.y + panel.h - 8);
   }
 
   // Building: describe the tool. Inspecting: describe the selected part, else the hovered one.
@@ -745,20 +750,18 @@ export class StationScene implements Scene {
       const { hp } = this.installingSalvage();
       line(`Salvage · HP ${fmt(hp)} / ${def.maxHp} · free to install`, { size: 12, color: hp < def.maxHp ? THEME.warn : THEME.good }, 16);
     }
-    if (!building && shown) {
-      line(`HP ${shown.hp} / ${def.maxHp}`, { size: 12, color: shown.hp < def.maxHp ? THEME.warn : THEME.text }, 16);
+    if (building) {
+      line(`Mass ${def.mass} · HP ${def.maxHp}`, { size: 12 }, 16);
+    } else if (shown) {
+      line(`HP ${shown.hp} / ${def.maxHp} · Mass ${def.mass}`, { size: 12, color: shown.hp < def.maxHp ? THEME.warn : THEME.text }, 16);
       if (usesRotation(shown.type)) {
         const label = shown.type === "engine" ? "Exhaust points" : "Facing";
         line(`${label} ${FACING_NAMES[shown.rotation]}`, { size: 12 }, 16);
       }
       if (shown.type !== "bridge") line(`Sells for $${saleProceeds(this.run, shown.hex)}${this.fuelNote(shown)}`, { size: 12 }, 16);
     }
-    for (const lineText of partDetails(type)) {
-      line(lineText, { size: 12 }, 16);
-    }
-    if (this.inspected && shown && shown.type !== "bridge" && !this.touch) {
-      y += 8;
-      line(usesRotation(shown.type) ? "R rotate · Del sell · Esc deselect" : "Del sell · Esc deselect", { size: 12, color: THEME.accent }, 16);
+    for (const detail of partDetails(type)) {
+      for (const lineText of wrapText(ctx, detail, textWidth, 12)) line(lineText, { size: 12 }, 16);
     }
   }
 
@@ -1228,9 +1231,10 @@ const usesRotation = (type: PartId): boolean => type === "engine" || PARTS[type]
 
 const FACING_NAMES = ["forward", "forward-right", "back-right", "back", "back-left", "forward-left"];
 
+// What the part does, after its mass and HP.
 function partDetails(id: PartId): string[] {
   const def = PARTS[id];
-  const lines = [`Mass ${def.mass} · HP ${def.maxHp}`];
+  const lines: string[] = [];
   if (def.crewRequired > 0) lines.push(`Needs ${def.crewRequired} crew`);
   if (def.crewCapacity > 0) lines.push(`Berths for ${def.crewCapacity} crew`);
   if (def.thrust > 0) lines.push(`Thrust ${def.thrust} · Turn ${def.turn}`);
