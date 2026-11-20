@@ -1,6 +1,6 @@
 # Hex Ship
 
-A top-down space trading game you play in the browser. Build a ship out of hex parts, haul cargo between two
+A top-down space trading game you play in the browser. Build a ship out of hex parts, haul cargo between seven
 planets, and fight off raiders on the way. Each run is roguelike: lose your ship and the run is over.
 
 **Play it:** https://richardlabrecque.github.io/hex_ship/
@@ -12,14 +12,28 @@ planets, and fight off raiders on the way. Each run is roguelike: lose your ship
 
 ## How to play
 
+New players start with a short tutorial: two scripted flights before the first real run. To play it again, add
+`#tutorial` to the end of the address.
+
 1. **Build your ship at the station.** Buy hex parts and place them on the grid: bridge, engines, fuel tanks, crew
    modules, cargo bays, armor, shields, and laser, cannon or missile pods. A ship has to be spaceworthy before it
    can launch, and where you put the engines matters. Engines that sit off-center twist the ship, and the
    shipyard shows how far.
-2. **Take a contract.** Load cargo, hire crew and buy fuel. Heavier ships burn more fuel.
-3. **Fly it to the other planet.** Your weapons fire on their own. Your job is to fly.
+2. **Take a contract.** Load cargo, hire crew and buy fuel. Heavier ships burn more fuel. Most contracts name
+   the planet they're bound for, and farther planets pay more. Open contracts pay less but go to any planet.
+3. **Fly it there.** You can dock at any planet except the one you left, and you're paid for the cargo bound
+   there. Your weapons fire on their own. Your job is to fly.
 4. **Sell, repair, upgrade, repeat.** Each delivery raises your reputation. Reputation unlocks better-paying
-   contracts, which need bigger ships, and bigger ships draw tougher enemies.
+   contracts, which need bigger ships, and bigger ships draw tougher enemies. Destroyed enemies sometimes leave
+   parts behind: fly into them to salvage them, then install or sell them at the station.
+
+There are two ways to win:
+
+- **The Warrior** destroys the raiders' Flagship. It turns up every third trip at the top danger level.
+- **The Merchant** delivers the Grand Haul, a huge contract between the two planets farthest apart. It's only
+  offered once your reputation reaches the top rank.
+
+After a win you can keep playing the same run.
 
 Your score has three columns: peak ship value at launch, cargo sold, and bounties collected. Your best in each
 column is saved as a high score. A run in progress is saved in your browser, so you can close the tab and come
@@ -27,18 +41,23 @@ back to it.
 
 ### Controls
 
-| Where    | Input                     | Action                                |
-| -------- | ------------------------- | ------------------------------------- |
-| Station  | Left-click                | Buy and place a part / select a part  |
-| Station  | Right-click or `Del`      | Sell a part                           |
-| Station  | `1`–`8`                   | Pick a part to build                  |
-| Station  | `R` / `Shift+R`           | Rotate                                |
-| Station  | `Esc`                     | Stop building / deselect              |
-| Flight   | `W` / `↑`                 | Thrust                                |
-| Flight   | `S` / `↓`                 | Brake                                 |
-| Flight   | `A` `D` / `←` `→`         | Turn                                  |
-| Flight   | `Esc`                     | Turn back                             |
-| Anywhere | `M` or the speaker button | Mute                                  |
+| Where     | Input                     | Action                                    |
+| --------- | ------------------------- | ----------------------------------------- |
+| Briefing  | `Enter`                   | Launch                                    |
+| Briefing  | `Esc`                     | Skip the tutorial                         |
+| Station   | Left-click                | Buy and place a part / select a part      |
+| Station   | Right-click or `Del`      | Sell a part                               |
+| Station   | `1`–`9`                   | Pick a part to build                      |
+| Station   | `R` / `Shift+R`           | Rotate                                    |
+| Station   | `Esc`                     | Stop building / deselect                  |
+| Flight    | `W` / `↑`                 | Thrust                                    |
+| Flight    | `S` / `↓`                 | Brake                                     |
+| Flight    | `A` `D` / `←` `→`         | Turn                                      |
+| Flight    | `Esc`                     | Turn back, or call a tow when out of fuel |
+| Game over | `Enter`                   | Start a new run                           |
+| Victory   | `C`                       | Copy your result to share it              |
+| Victory   | `K`                       | Keep playing                              |
+| Anywhere  | `M` or the speaker button | Mute                                      |
 
 **On a phone or tablet,** hold it sideways. The station has its own touch layout: the ship's grid on the left and
 tabs on the right. To build, tap a part in the Parts tab, then tap a hex to see the part there. Rotate it if you
@@ -73,24 +92,24 @@ npm run preview    # serve the built game
 ```
 src/
   audio/    synthesized sound effects
-  data/     part catalog, enemy designs and balance numbers
-  economy/  contracts, crew, fuel, shop, danger tiers and run state
+  data/     part catalog, enemy designs, the tutorial script and balance numbers
+  economy/  contracts, crew, fuel, shop, salvage, danger tiers, wins, the tutorial run and run state
   engine/   game loop, input and scenes
   fx/       particles and screen shake
-  hex/      hex-grid maths
+  hex/      hex-grid math
   render/   drawing ships, parts and UI
   save/     mid-run save and high scores (localStorage)
-  scenes/   station, flight and game-over screens
+  scenes/   station, flight, tutorial briefing and game-over screens
   ship/     ship model, stats, damage and spaceworthiness checks
   sim/      flight physics, weapons, enemy AI and spawning
 tests/      Vitest tests, including the balance rules
 ```
 
 Some game-design rules are enforced as tests in [`tests/balance.test.ts`](tests/balance.test.ts). One example: a
-full fuel tank must fly the starter ship twice the distance between the planets. If you change the numbers in
-[`src/data/`](src/data/), run the tests.
+full fuel tank must fly the starter ship twice the distance from any planet to its nearest neighbor. If you
+change the numbers in [`src/data/`](src/data/), run the tests.
 
 ## Status
 
 Playable, and still being built. Balance numbers are placeholders until a proper balance pass. Ideas still on the
-list include random route events, salvage from kills and part upgrade tiers.
+list include random route events and part upgrade tiers.
